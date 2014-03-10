@@ -1,7 +1,7 @@
 // https://code.google.com/p/closure-library/source/browse/closure/goog/math/long.js
 
 fs = require('fs');
-
+types = require('./types.js')
 
 var registers = [];
 var regLabels = {};
@@ -412,7 +412,7 @@ function loadIntoMem(code) {
 		} else if (line[2] === 'IS') {
 			// if we are an 'IS' statement, set up a ref to the actual register
 			regLabels[line[1]] = line[3];
-			line = '';
+			line = ''; // set to empty, so we dont acutally put in mem
 		}
 		memory[i] = [line[1], line[2]];
 	}
