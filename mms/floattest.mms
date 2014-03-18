@@ -1,14 +1,14 @@
-	a	IS	$0
-	b	IS	$1	
-	c	IS	$2
-	d	IS	$3
-	e	IS	$4
-	f	IS	$5
-	g	IS	$6
-	h	IS	$7			
+a	IS	$0
+b	IS	$1	
+c	IS	$2
+d	IS	$3
+e	IS	$4
+f	IS	$5
+g	IS	$6
+h	IS	$7			
 
-Main	FLOT	a,20	%a = 20.0
-	FLOT	b,12.2	%b = 12.2
+Main	FLOTI	a,20	%a = 20.0
+	FLOTI	b,12.2	%b = 12.2
 	FADD	c,a,b	%c = a + b 
 	FDIV	d,b,a	%d = a / a
 	FSUB	e,c,b	%e = c - b

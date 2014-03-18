@@ -1,16 +1,17 @@
-// https://code.google.com/p/closure-library/source/browse/closure/goog/math/long.js
 
 fs = require('fs');
 types = require('./types.js')
+ByteArray = types.ByteArray
 
 var registers = [];
 var regLabels = {};
 var specialReg = {};
 var memory = [];
 var labels = {};
-var iptr;
+var iptr; // instruction pointer
+var gregptr = 255; // points to the last allocated global reg ($255 is alwyas global)
 
-var dbgopts = false;
+var dbgopts = true;
 
 function debug(str) {
 	if (dbgopts) {
@@ -41,6 +42,10 @@ function getAddr(addr) {
 	return labels[addr] || addr;
 }
 
+function getMem(addr) {
+	return;
+}
+
 var ops = {
 	// the following don't exist in knuth's book
 	'LDA' : function(args) {
@@ -61,28 +66,72 @@ var ops = {
 	'16ADDU' : function(args) {console.log('16ADDU: Not Implemented');iptr++;},
 	'16ADDUI' : function(args) {console.log('16ADDUI: Not Implemented');iptr++;},
 	'ADD' : function(args) {
-		// rega = regb + regc
+		// a = b + c
 		// var rega = args[0];
 		// var regb = args[1];
 		// var regc = args[2];		
 		debug('ADD: ' + args);
-		registers[getReg(args[0])] = registers[getReg(args[1])] + registers[getReg(args[2])];
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		var offset = 0
+		a.uint64[0] = b.uint64[0] + c.uint64[0];
+		if (a.uint64[0] < b.uint64[0]) {
+			offset = 1
+		}
+		a.uint64[1] = b.uint64[1] + c.uint64[1] + offset;
+		registers[getReg(args[0])] = a;
 		iptr++;
 	},
 	'ADDI' : function(args) {console.log('ADDI: Not Implemented');iptr++;},
-	'ADDU' : function(args) {console.log('ADDU: Not Implemented');iptr++;},
+	'ADDU' : function(args) {
+		// a = b + c
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];	
+		debug('ADDU: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		var offset = 0
+		a.uint64[0] = b.uint64[0] + c.uint64[0];
+		if (a.uint64[0] < b.uint64[0]) {
+			offset = 1
+		}
+		a.uint64[1] = b.uint64[1] + c.uint64[1] + offset;
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'ADDUI' : function(args) {console.log('ADDUI: Not Implemented');iptr++;},
 	'AND' : function(args) {
 		// rega = regb & regc
 		// var rega = args[0];
 		// var regb = args[1];
 		// var regc = args[2];
-		debug('AND - UNTESTED: ' + args);
-		registers[getReg(args[0])] = registers[getReg(args[1])] & registers[getReg(args[2])];
+		debug('AND: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = b.uint64[0] & c.uint64[0];
+		a.uint64[1] = b.uint64[1] & c.uint64[1];
+		registers[getReg(args[0])] = a;
 		iptr++;
 	},
 	'ANDI' : function(args) {console.log('ANDI: Not Implemented');iptr++;},
-	'ANDN' : function(args) {console.log('ANDN: Not Implemented');iptr++;},
+	'ANDN' : function(args) {
+		// rega = regb & ~regc
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('ANDN: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = b.uint64[0] & ~c.uint64[0];
+		a.uint64[1] = b.uint64[1] & ~c.uint64[1];
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'ANDNH' : function(args) {console.log('ANDNH: Not Implemented');iptr++;},
 	'ANDNI' : function(args) {console.log('ANDNI: Not Implemented');iptr++;},
 	'ANDNL' : function(args) {console.log('ANDNL: Not Implemented');iptr++;},
@@ -133,18 +182,31 @@ var ops = {
 	'DIVU' : function(args) {console.log('DIVU: Not Implemented');iptr++;},
 	'DIVUI' : function(args) {console.log('DIVUI: Not Implemented');iptr++;},
 	'FADD' : function(args) {
-		debug('FADD: Wrapper around ADD');
-		ops.ADD(args);
+		// a = b + c
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('FADD: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.setFloat64(b.float64[0] + c.float64[0]);
+		registers[getReg(args[0])] = a;		
+		iptr++;
 	},
 	'FCMP' : function(args) {console.log('FCMP: Not Implemented');iptr++;},
 	'FCMPE' : function(args) {console.log('FCMPE: Not Implemented');iptr++;},
 	'FDIV' : function(args) {
-		// rega = regb / regc
+		// a = b / c
 		// var rega = args[0];
 		// var regb = args[1];
 		// var regc = args[2];
 		debug('FDIV: ' + args);
-		registers[getReg(args[0])] = registers[getReg(args[1])] / registers[getReg(args[2])];
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.setFloat64(b.float64[0] / c.float64[0]);
+		registers[getReg(args[0])] = a;		
 		iptr++;		
 	},
 	'FEQL' : function(args) {console.log('FEQL: Not Implemented');iptr++;},
@@ -153,35 +215,64 @@ var ops = {
 	'FIX' : function(args) {console.log('FIX: Not Implemented');iptr++;},
 	'FIXU' : function(args) {console.log('FIXU: Not Implemented');iptr++;},
 	'FLOT' : function(args) {
-		// var reg = args[0];
-		// var num = args[1];
+		// a = (float) b
+		// var rega = args[0];
+		// var regb = args[1];
 		debug('FLOT: ' + args);
-		registers[getReg(args[0])] = Number(args[1]);
+		var val = new ByteArray();
+		val.setFloat64(args[1].getInt64());
+		registers[getReg(args[0])] = val;
 		iptr++;
 	},
-	'FLOTI' : function(args) {console.log('FLOTI: Not Implemented');iptr++;},
+	'FLOTI' : function(args) {
+		// a = (float) b
+		// var rega = args[0];
+		// var regb = args[1];		
+		debug('FLOTI: ' + args);
+		var val = new ByteArray();
+		val.setFloat64(Number(args[1]));
+		registers[getReg(args[0])] = val;
+		iptr++;
+	},
 	'FLOTU' : function(args) {console.log('FLOTU: Not Implemented');iptr++;},
 	'FLOTUI' : function(args) {console.log('FLOTUI: Not Implemented');iptr++;},
 	'FMUL' : function(args) {
-		// rega = regb / regc
+		// a = b * c
 		// var rega = args[0];
 		// var regb = args[1];
 		// var regc = args[2];
 		debug('FMUL: ' + args);
-		registers[getReg(args[0])] = registers[getReg(args[1])] * registers[getReg(args[2])];
-		iptr++;			
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.setFloat64(b.float64[0] * c.float64[0]);
+		registers[getReg(args[0])] = a;		
+		iptr++;
 	},
 	'FREM' : function(args) {console.log('FREM: Not Implemented');iptr++;},
 	'FSQRT' : function(args) {
-		// rega = sqrt(regb)
+		// a = sqrt(b)
 		// var rega = args[0];
 		// var regb = args[1];
-		registers[getReg(args[0])] = Math.sqrt(registers[getReg(args[1])]);
+		debug('FSQRT: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])]
+		a.setFloat64(Math.sqrt(b.float64[0]));
+		registers[getReg(args[0])] = a;
 		iptr++;
 	},
 	'FSUB' : function(args) {
-		debug('FSUB: Wrapper around SUB');
-		ops.SUB(args);
+		// a = b - c
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('FSUB: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.setFloat64(b.float64[0] - c.float64[0]);
+		registers[getReg(args[0])] = a;		
+		iptr++;
 	},
 	'FUN' : function(args) {console.log('FUN: Not Implemented');iptr++;},
 	'FUNE' : function(args) {console.log('FUNE: Not Implemented');iptr++;},
@@ -196,7 +287,10 @@ var ops = {
 	'INCML' : function(args) {console.log('INCML: Not Implemented');iptr++;},
 	'JMP' : function(args) {console.log('JMP: Not Implemented');iptr++;},
 	'JMPB' : function(args) {console.log('JMPB: Not Implemented');iptr++;},
-	'LDB' : function(args) {console.log('LDB: Not Implemented');iptr++;},
+	'LDB' : function(args) {
+		console.log('LDB: Not Implemented');
+		iptr++;
+	},
 	'LDBI' : function(args) {console.log('LDBI: Not Implemented');iptr++;},
 	'LDBU' : function(args) {console.log('LDBU: Not Implemented');iptr++;},
 	'LDBUI' : function(args) {console.log('LDBUI: Not Implemented');iptr++;},
@@ -222,9 +316,7 @@ var ops = {
 	'LDWUI' : function(args) {console.log('LDWUI: Not Implemented');iptr++;},
 	'MOR' : function(args) {console.log('MOR: Not Implemented');iptr++;},
 	'MORI' : function(args) {console.log('MORI: Not Implemented');iptr++;},
-	'MUL' : function(args) {	
-		console.log('MUL: Not Implemented');iptr++;
-	},
+	'MUL' : function(args) {console.log('MUL: Not Implemented');iptr++;},
 	'MULI' : function(args) {console.log('MULI: Not Implemented');iptr++;},
 	'MULU' : function(args) {console.log('MULU: Not Implemented');iptr++;},
 	'MULUI' : function(args) {console.log('MULUI: Not Implemented');iptr++;},
@@ -232,25 +324,90 @@ var ops = {
 	'MUXI' : function(args) {console.log('MUXI: Not Implemented');iptr++;},
 	'MXOR' : function(args) {console.log('MXOR: Not Implemented');iptr++;},
 	'MXORI' : function(args) {console.log('MXORI: Not Implemented');iptr++;},
-	'NAND' : function(args) {console.log('NAND: Not Implemented');iptr++;},
+	'NAND' : function(args) {
+		// rega = ~(regb & regc)
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('NAND: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = ~(b.uint64[0] & c.uint64[0]);
+		a.uint64[1] = ~(b.uint64[1] & c.uint64[1]);
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'NANDI' : function(args) {console.log('NANDI: Not Implemented');iptr++;},
 	'NEG' : function(args) {console.log('NEG: Not Implemented');iptr++;},
 	'NEGI' : function(args) {console.log('NEGI: Not Implemented');iptr++;},
 	'NEGU' : function(args) {console.log('NEGU: Not Implemented');iptr++;},
 	'NEGUI' : function(args) {console.log('NEGUI: Not Implemented');iptr++;},
-	'NOR' : function(args) {console.log('NOR: Not Implemented');iptr++;},
+	'NOR' : function(args) {
+		// rega = regb | regc
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('NOR: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = ~(b.uint64[0] | c.uint64[0]);
+		a.uint64[1] = ~(b.uint64[1] | c.uint64[1]);
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'NORI' : function(args) {console.log('NORI: Not Implemented');iptr++;},
-	'NXOR' : function(args) {console.log('NXOR: Not Implemented');iptr++;},
+	'NXOR' : function(args) {
+		// rega = ~(regb ^ regc)
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('NXOR: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = ~(b.uint64[0] ^ c.uint64[0]);
+		a.uint64[1] = ~(b.uint64[1] ^ c.uint64[1]);
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'NXORI' : function(args) {console.log('NXORI: Not Implemented');iptr++;},
 	'ODIF' : function(args) {console.log('ODIF: Not Implemented');iptr++;},
 	'ODIFI' : function(args) {console.log('ODIFI: Not Implemented');iptr++;},
-	'OR' : function(args) {console.log('OR: Not Implemented');iptr++;},
+	'OR' : function(args) {
+		// rega = regb | regc
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('OR: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = b.uint64[0] | c.uint64[0];
+		a.uint64[1] = b.uint64[1] | c.uint64[1];
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'ORH' : function(args) {console.log('ORH: Not Implemented');iptr++;},
 	'ORI' : function(args) {console.log('ORI: Not Implemented');iptr++;},
 	'ORL' : function(args) {console.log('ORL: Not Implemented');iptr++;},
 	'ORMH' : function(args) {console.log('ORMH: Not Implemented');iptr++;},
 	'ORML' : function(args) {console.log('ORML: Not Implemented');iptr++;},
-	'ORN' : function(args) {console.log('ORN: Not Implemented');iptr++;},
+	'ORN' : function(args) {
+		// rega = regb | ~regc
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('ORN: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = b.uint64[0] | ~c.uint64[0];
+		a.uint64[1] = b.uint64[1] | ~c.uint64[1];
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'ORNI' : function(args) {console.log('ORNI: Not Implemented');iptr++;},
 	'PBEV' : function(args) {console.log('PBEV: Not Implemented');iptr++;},
 	'PBEVB' : function(args) {console.log('PBEVB: Not Implemented');iptr++;},
@@ -326,16 +483,42 @@ var ops = {
 	'STWU' : function(args) {console.log('STWU: Not Implemented');iptr++;},
 	'STWUI' : function(args) {console.log('STWUI: Not Implemented');iptr++;},
 	'SUB' : function(args) {
-		// rega = regb + regc
+		// a = b - c
 		// var rega = args[0];
 		// var regb = args[1];
-		// var regc = args[2];		
+		// var regc = args[2];
 		debug('SUB: ' + args);
-		registers[getReg(args[0])] = registers[getReg(args[1])] - registers[getReg(args[2])];
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		var offset = 0;
+		a.uint64[0] = b.uint64[0] - c.uint64[0];
+		if (a.uint64[0] > b.uint64[0]) {
+			offset = 1;
+		}
+		a.uint64[1] = b.uint64[1] - c.uint64[1] - offset;
+		registers[getReg(args[0])] = a;
 		iptr++;
 	},
 	'SUBI' : function(args) {console.log('SUBI: Not Implemented');iptr++;},
-	'SUBU' : function(args) {console.log('SUBU: Not Implemented');iptr++;},
+	'SUBU' : function(args) {
+		// a = b - c
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('SUBU: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		var offset = 0;
+		a.uint64[0] = b.uint64[0] - c.uint64[0];
+		if (a.uint64[0] > b.uint64[0]) {
+			offset = 1;
+		}
+		a.uint64[1] = b.uint64[1] - c.uint64[1] - offset;
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'SUBUI' : function(args) {console.log('SUBUI: Not Implemented');iptr++;},
 	'SWYM' : function(args) {console.log('SWYM: Not Implemented');iptr++;},
 	'SYNC' : function(args) {console.log('SYNC: Not Implemented');iptr++;},
@@ -354,7 +537,20 @@ var ops = {
 	'UNSAVE' : function(args) {console.log('UNSAVE: Not Implemented');iptr++;},
 	'WDIF' : function(args) {console.log('WDIF: Not Implemented');iptr++;},
 	'WDIFI' : function(args) {console.log('WDIFI: Not Implemented');iptr++;},
-	'XOR' : function(args) {console.log('XOR: Not Implemented');iptr++;},
+	'XOR' : function(args) {
+		// rega = regb ^ regc
+		// var rega = args[0];
+		// var regb = args[1];
+		// var regc = args[2];
+		debug('XOR: ' + args);
+		var a = new ByteArray();
+		var b = registers[getReg(args[1])];
+		var c = registers[getReg(args[2])];
+		a.uint64[0] = b.uint64[0] ^ c.uint64[0];
+		a.uint64[1] = b.uint64[1] ^ c.uint64[1];
+		registers[getReg(args[0])] = a;
+		iptr++;
+	},
 	'XORI' : function(args) {console.log('XORI: Not Implemented');iptr++;},
 	'ZSEV' : function(args) {console.log('ZSEV: Not Implemented');iptr++;},
 	'ZSEVI' : function(args) {console.log('ZSEVI: Not Implemented');iptr++;},
@@ -405,14 +601,27 @@ function run() {
 function loadIntoMem(code) {
 	for (var i = 0; i < code.length; i++) {
 		// console.log(code[i]);
+		// We have line[0] = lable
+		// We have line[1] = opcode
+		// We have line[2] = args
 		var line = code[i];
 		if (line[0]) {
-			// if we are a label, add to the labels list
+			// we have a lable so process it
+			if (line[1] === 'IS') {
+				// we are an 'IS' statement, set up a ref to the actual register
+				regLabels[line[0]] = line[2];
+				line = ''; // set to empty, so we dont acutally put in mem
+			} else if(line[1] === 'GREG') {
+				// we are global register, so add to the lables and set the val
+				var greg = '$' + --gregptr;
+				regLabels[line[0]] = greg;
+				var val = new ByteArray();
+				val.setFromString(line[2]);
+				registers[greg] = val;
+			} else {
+			// we are a normal label, add to the labels list
 			labels[line[0]] = i;
-		} else if (line[2] === 'IS') {
-			// if we are an 'IS' statement, set up a ref to the actual register
-			regLabels[line[1]] = line[3];
-			line = ''; // set to empty, so we dont acutally put in mem
+			}
 		}
 		memory[i] = [line[1], line[2]];
 	}
@@ -428,12 +637,12 @@ function readSrcFile(fname) {
 	return data
 }
 
-
-code = readSrcFile('../mms/tri_test.mms');
+code = readSrcFile('../mms/test.mms');
 loadIntoMem(code);
 // console.log(memory);
 // console.log(regLabels);
 iptr = labels['Main'];
 run()
 console.log(registers);
+
 

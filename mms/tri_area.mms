@@ -2,11 +2,11 @@
 
 	PREFIX :tri_area:
 
-	a	IS	$0
-	b	IS	$1
-	c	IS	$2
-	s	IS	$3
-	t	IS	$255		%Pseudocode in C:
+a	IS	$0
+b	IS	$1
+c	IS	$2
+s	IS	$3
+t	IS	$255		%Pseudocode in C:
 
 :tri_area	FADD	s,a,b		%s = a + b;
 	FADD	s,s,c		%s += c;
@@ -23,13 +23,13 @@
 
 	PREFIX :Main:
 
-	argc	IS	$0
-	argv	IS	$1
-	h	IS	$2
-	a	IS	$3
-	b	IS	$4
-	c	IS	$5
-	t	IS	$255
+argc	IS	$0
+argv	IS	$1
+h	IS	$2
+a	IS	$3
+b	IS	$4
+c	IS	$5
+t	IS	$255
 
 :Main	FLOT	a,12		%a = 12.0;
 	FLOT	b,15		%b = 15.0;

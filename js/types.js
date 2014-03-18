@@ -11,6 +11,7 @@ function ByteArray() {
 }
 
 ByteArray.prototype.setFloat64 = function(num) {
+	num = Number(num);
 	this.float64[0] = num;
 };
 ByteArray.prototype.getFloat64 = function() {
@@ -18,14 +19,17 @@ ByteArray.prototype.getFloat64 = function() {
 };
 
 ByteArray.prototype.setUint64 = function(num) {
-	this.uint64[1] = num / 4294967296;
-	this.uint64[0] = num % 4294967296;	
+	num = Number(num);
+	console.log(num);
+	this.uint64[1] = num / 4294967296; // decimals just turn into 0
+	this.uint64[0] = num % 4294967296;
 };
 ByteArray.prototype.getUint64 = function() {
-	return this.uint64[0] + 4294967296*this.uint64[1]; 
+	return this.uint64[0] + 4294967296*this.uint64[1];
 };
 
 ByteArray.prototype.setInt64 = function(num) {
+	num = Number(num);
 	if (num < 0) {
 		num = Math.abs(num)
 		// 2's compliment low bits
@@ -56,7 +60,7 @@ ByteArray.prototype.getInt64 = function() {
 };
 
 ByteArray.prototype.setUint32 = function(num) {
-	// if num % 1 return error?
+	num = Number(num);
 	this.uint64[0] = num;
 	this.uint64[1] = 0;	
 };
@@ -65,7 +69,7 @@ ByteArray.prototype.getUint32 = function() {
 };
 
 ByteArray.prototype.setInt32 = function(num) {
-	// if (num % 1) throw new Error('Float passed to setInt32');
+	num = Number(num);
 	this.int64[0] = num;
 	this.int64[1] = 0;
 };
@@ -73,21 +77,38 @@ ByteArray.prototype.getInt32 = function() {
 	return this.int64[0];
 };
 
+ByteArray.prototype.setInt64FromHexString = function(numstr) {
+	var zerostoadd = Array(16 - numstr.length + 1).join('0');
+	numstr = zerostoadd + numstr;
+	var highbits = '0x' + numstr.slice(0,8);
+	var lowbits = '0x' + numstr.slice(8);
+	this.int64[1] = parseInt(highbits);
+	this.int64[0] = parseInt(lowbits);
+}
 
-// b = new ByteArray()
-// b.setInt32(-1);
-// console.log(b.int64[0]);
-// console.log(b.uint64[0]);
+ByteArray.prototype.setFromString = function(numstr) {
+	if ('#' === numstr[0]) {
+		this.setInt64FromHexString(numstr.slice(1));
+	} else if (numstr.indexOf('.') != -1) {
+		this.setFloat64(numstr);
+	} else {
+		this.setInt64(numstr);
+	}
+}
 
-// b.setFloat64(-1.1);
-// console.log(b.float64[0]);
-// console.log(b.int64[0]);
-// console.log(b.int64[1]);
 
-// b.setUint64(4294967299);
-// console.log(b.uint64[0] + 4294967296*b.uint64[1]);
-
-// b.setInt64(-100000000000);
-// console.log(b.getInt64());
+// ByteArray.prototype.toString = function() {
+// 	return this.float64[0]; // probably want the hex value here
+// }
+ByteArray.prototype.inspect = function() {
+	return this.getInt64(); // probably want the hex value here
+}
+// ByteArray.prototype.valueOf = function() {
+// 	return this.float64[0]; // probably want the hex value here
+// }
 
 exports.ByteArray = ByteArray;
+
+// var a = new ByteArray();
+// a.setFromString('#1');
+// console.log(a);
