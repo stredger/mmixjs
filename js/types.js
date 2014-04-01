@@ -20,7 +20,6 @@ ByteArray.prototype.getFloat64 = function() {
 
 ByteArray.prototype.setUint64 = function(num) {
 	num = Number(num);
-	console.log(num);
 	this.uint64[1] = num / 4294967296; // decimals just turn into 0
 	this.uint64[0] = num % 4294967296;
 };
@@ -97,18 +96,21 @@ ByteArray.prototype.setFromString = function(numstr) {
 }
 
 
-// ByteArray.prototype.toString = function() {
-// 	return this.float64[0]; // probably want the hex value here
-// }
 ByteArray.prototype.inspect = function() {
-	return this.getInt64(); // probably want the hex value here
+	// gives the hex value of whatever is in the ByteArray buffer
+	var hival = Number(this.uint64[1]).toString(16);
+	var lowval = Number(this.uint64[0]).toString(16);
+	var hizerostoadd = Array(8 - hival.length + 1).join('0');
+	var lowzerostoadd = Array(8 - lowval.length + 1).join('0');
+	return '0x' + hizerostoadd + hival + lowzerostoadd + lowval;
 }
-// ByteArray.prototype.valueOf = function() {
-// 	return this.float64[0]; // probably want the hex value here
-// }
+ByteArray.prototype.toString = function() {
+	return ByteArray.prototype.inspect();
+}
+
 
 exports.ByteArray = ByteArray;
 
 // var a = new ByteArray();
-// a.setFromString('#1');
+// a.setFromString('#156546cfd678643');
 // console.log(a);
