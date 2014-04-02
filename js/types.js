@@ -1,5 +1,4 @@
 
-
 function ByteArray() {
 	// our array of 8 bytes
 	this.bytes = new ArrayBuffer(8);
@@ -95,7 +94,6 @@ ByteArray.prototype.setFromString = function(numstr) {
 	}
 }
 
-
 ByteArray.prototype.inspect = function() {
 	// gives the hex value of whatever is in the ByteArray buffer
 	var hival = Number(this.uint64[1]).toString(16);
@@ -108,9 +106,4 @@ ByteArray.prototype.toString = function() {
 	return ByteArray.prototype.inspect();
 }
 
-
 exports.ByteArray = ByteArray;
-
-// var a = new ByteArray();
-// a.setFromString('#156546cfd678643');
-// console.log(a);

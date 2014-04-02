@@ -4,8 +4,7 @@ types = require('./types.js');
 ByteArray = types.ByteArray;
 
 
-function MmixInterpreter() {
-}
+function MmixInterpreter() {}
 
 var Registers = []; // array of registers, registers look like $0, $1 etc.
 var RegLabels = {}; // mapping of labels to actual registers eg. {a : $1}
@@ -66,11 +65,10 @@ function copyValue(val) {
 }
 
 
-
 var TrapOps = {
 	'Fputs' : function() {
 		debug('TRAP -> Fputs');
-		var data = Memory[Registers['$255']];
+		var data = Code[Registers['$255']];
 		var args = data[1].split(',');
 		console.log(args[0]);
 		iptr += 4;
@@ -960,7 +958,26 @@ Opcodes.prototype.SR = function(args) {console.log('SR: Not Implemented');iptr +
 Opcodes.prototype.SRI = function(args) {
 	Opcodes.prototype.SR(args);
 };
-Opcodes.prototype.SRU = function(args) {console.log('SRU: Not Implemented');iptr += 4};
+Opcodes.prototype.SRU = function(args) {
+	// a = b >> c
+	// a = args[0]
+	// b = args[1]
+	// c = args[2]
+	debug('SRU: ' + args);
+	var b = Registers[getReg(args[1])];
+	var c = getValue(args[2]);
+	var shiftamount = c.getUint64();
+	var a = new ByteArray();
+	if (shiftamount < 32) {
+		var mask = ~(0xffffffff << (shiftamount % 32));
+		var overflowbits = (b.uint64[1] & mask) << (32 - shiftamount);
+		a.uint64[1] = b.uint64[1] >>> shiftamount;
+		console.log(a.uint64[1]);
+		a.uint64[0] = (b.uint64[0] >>> shiftamount) | overflowbits;
+	}
+	Registers[getReg(args[0])] = a;
+	iptr += 4;
+};
 Opcodes.prototype.SRUI = function(args) {
 	Opcodes.prototype.SRU(args);
 };
@@ -1450,12 +1467,16 @@ function readSrcFile(fname) {
 	return data;
 }
 
-src = readSrcFile('../mms/test.mms');
+
+var fname = process.argv[2];
+var src = readSrcFile(fname);
 loadIntoMem(src);
 console.log(RegLabels);
 iptr = Labels['Main'];
 // console.log(Registers);
 run();
 console.log(Registers);
-// console.log(Memory[ 64 - (64 % 8) ]);
+
+// for tri_test
+// console.log(Registers['$3'].getFloat64());
 
