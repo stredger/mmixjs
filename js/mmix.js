@@ -3,15 +3,19 @@ fs = require('fs');
 types = require('./types.js');
 ByteArray = types.ByteArray;
 
-var registers = [];
-var regLabels = {};
-var specialReg = {};
-var memory = [];
-//var code = [];
-var labels = {};
-var constants = {};
+
+function MmixInterpreter() {
+}
+
+var Registers = []; // array of registers, registers look like $0, $1 etc.
+var RegLabels = {}; // mapping of labels to actual registers eg. {a : $1}
+var SpecialReg = []; // TODO: special registers for overflow and such
+var Memory = []; // Our array of Memory cells
+var Code = []; // Array of instructions, sould only have entries on multiples of 8
+var Labels = {}; // mapping of labels to code positions in the Code array 
+var Constants = {}; // mapping of labels to constant values
 var iptr; // instruction pointer
-var stkptr; // current pointer into available memory
+var stkptr; // current pointer into available Memory
 var gregptr = 255; // points to the last allocated global reg ($255 is alwyas global)
 
 var dbgopts = true;
@@ -30,23 +34,23 @@ function warn(str) {
 
 
 function getReg(symbol) {
-	return regLabels[symbol] || symbol;
+	return RegLabels[symbol] || symbol;
 }
 
 function getAddr(addr) {
-	return labels[addr] || addr;
+	return Labels[addr] || addr;
 }
 
 function getValue(symbol) {
-	if (regLabels[symbol]) {
+	if (RegLabels[symbol]) {
 		// we are a symbol for a register
-		return registers[regLabels[symbol]];
-	} else if (registers[symbol]) {
+		return Registers[RegLabels[symbol]];
+	} else if (Registers[symbol]) {
 		// we are a normal register
-		return registers[symbol];
-	} else if (constants[symbol]) {
+		return Registers[symbol];
+	} else if (Constants[symbol]) {
 		// we are a constant
-		return constants[symbol];
+		return Constants[symbol];
 	}
 	// we are an immediate so create a new ByteArray and put it in
 	var val = new ByteArray();
@@ -66,7 +70,7 @@ function copyValue(val) {
 var TrapOps = {
 	'Fputs' : function() {
 		debug('TRAP -> Fputs');
-		var data = memory[registers['$255']];
+		var data = Memory[Registers['$255']];
 		var args = data[1].split(',');
 		console.log(args[0]);
 		iptr += 4;
@@ -84,7 +88,7 @@ Opcodes.prototype.LDA = function(args) {
 	// var reg = args[0];
 	// var addr = args[1];
 	debug('LDA: ' + args);
-	registers[getReg(args[0])] = getAddr(args[1]);
+	Registers[getReg(args[0])] = getAddr(args[1]);
 	iptr += 4;
 };
 
@@ -111,7 +115,7 @@ Opcodes.prototype.ADD = function(args) {
 	// var regc = args[2];
 	debug('ADD: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	var offset = 0;
 	a.uint64[0] = b.uint64[0] + c.uint64[0];
@@ -119,7 +123,7 @@ Opcodes.prototype.ADD = function(args) {
 		offset = 1;
 	}
 	a.uint64[1] = b.uint64[1] + c.uint64[1] + offset;
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ADDI = function(args) {
@@ -132,7 +136,7 @@ Opcodes.prototype.ADDU = function(args) {
 	// var regc = args[2];	
 	debug('ADDU: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	var offset = 0;
 	a.uint64[0] = b.uint64[0] + c.uint64[0];
@@ -140,7 +144,7 @@ Opcodes.prototype.ADDU = function(args) {
 		offset = 1;
 	}
 	a.uint64[1] = b.uint64[1] + c.uint64[1] + offset;
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ADDUI = function(args) {
@@ -153,11 +157,11 @@ Opcodes.prototype.AND = function(args) {
 	// var regc = args[2];
 	debug('AND: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = b.uint64[0] & c.uint64[0];
 	a.uint64[1] = b.uint64[1] & c.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ANDI = function(args) {
@@ -170,11 +174,11 @@ Opcodes.prototype.ANDN = function(args) {
 	// var regc = args[2];
 	debug('ANDN: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = b.uint64[0] & ~c.uint64[0];
 	a.uint64[1] = b.uint64[1] & ~c.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ANDNH = function(args) {console.log('ANDNH: Not Implemented');iptr += 4};
@@ -204,39 +208,164 @@ Opcodes.prototype.BP = function(args) {console.log('BP: Not Implemented');iptr +
 Opcodes.prototype.BPB = function(args) {console.log('BPB: Not Implemented');iptr += 4};
 Opcodes.prototype.BZ = function(args) {console.log('BZ: Not Implemented');iptr += 4};
 Opcodes.prototype.BZB = function(args) {console.log('BZB: Not Implemented');iptr += 4};
-Opcodes.prototype.CMP = function(args) {console.log('CMP: Not Implemented');iptr += 4};
+Opcodes.prototype.CMP = function(args) {
+	// a > b ? 1 : -1, 0 if eq
+	// res = args[0]
+	// a = args[1]
+	// b = args[2]
+	debug('CMP: ' + args);
+	var a = Registers[getReg(args[1])];
+	var b = getValue(args[2]);
+	var val = new ByteArray();
+	// do hi bits first, if they are equal check the low bits
+	var result = (a.int64[1] > b.int64[1]) ? 1 : (a.int64[1] == b.int64[1] ? 0 : -1);
+	if (!result) {
+		// use unsigned for the low bits b/c the sign bit is in the high 32 bits
+		result = (a.uint64[0] > b.uint64[0]) ? 1 : (a.uint64[0] == b.uint64[0] ? 0 : -1);
+	}
+	val.setInt64(result);
+	Registers[getReg(args[0])] = val;
+	iptr += 4;
+};
 Opcodes.prototype.CMPI = function(args) {
 	Opcodes.prototype.CMP(args);
 };
-Opcodes.prototype.CMPU = function(args) {console.log('CMPU: Not Implemented');iptr += 4};
+Opcodes.prototype.CMPU = function(args) {
+	// a > b ? 1 : -1, 0 if eq
+	// res = args[0]
+	// a = args[1]
+	// b = args[2]
+	debug('CMPU: ' + args);
+	var a = Registers[getReg(args[1])];
+	var b = getValue(args[2]);
+	var val = new ByteArray();
+	var result = (a.uint64[1] > b.uint64[1]) ? 1 : (a.uint64[1] == b.uint64[1] ? 0 : -1);
+	if (!result) {
+		result = (a.uint64[0] > b.uint64[0]) ? 1 : (a.uint64[0] == b.uint64[0] ? 0 : -1);
+	}
+	val.setInt64(result);
+	Registers[getReg(args[0])] = val;
+	iptr += 4;
+};
 Opcodes.prototype.CMPUI = function(args) {
 	Opcodes.prototype.CMPU(args);
 };
-Opcodes.prototype.CSEV = function(args) {console.log('CSEV: Not Implemented');iptr += 4};
+Opcodes.prototype.CSEV = function(args) {
+	// if y % 2 == 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSEV: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.uint64[0] % 2 == 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSEVI = function(args) {
 	Opcodes.prototype.CSEV(args);
 };
-Opcodes.prototype.CSN = function(args) {console.log('CSN: Not Implemented');iptr += 4};
+Opcodes.prototype.CSN = function(args) {
+	// if y < 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSN: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() < 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSNI = function(args) {
 	Opcodes.prototype.CSN(args);
 };
-Opcodes.prototype.CSNN = function(args) {console.log('CSNN: Not Implemented');iptr += 4};
+Opcodes.prototype.CSNN = function(args) {
+	// if y >= 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSNN: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() >= 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSNNI = function(args) {
 	Opcodes.prototype.CSNN(args);
 };
-Opcodes.prototype.CSNP = function(args) {console.log('CSNP: Not Implemented');iptr += 4};
+Opcodes.prototype.CSNP = function(args) {
+	// if y <= 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSNP: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() <= 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSNPI = function(args) {
 	Opcodes.prototype.CSNP(args);
 };
-Opcodes.prototype.CSNZ = function(args) {console.log('CSNZ: Not Implemented');iptr += 4};
+Opcodes.prototype.CSNZ = function(args) {
+	// if y != 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSNZ: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() != 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSNZI = function(args) {
 	Opcodes.prototype.CSNZ(args);
 };
-Opcodes.prototype.CSOD = function(args) {console.log('CSOD: Not Implemented');iptr += 4};
+Opcodes.prototype.CSOD = function(args) {
+	// if y % 2 == 1 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSOD: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.uint64[0] % 2 == 1) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSODI = function(args) {
 	Opcodes.prototype.CSOD(args);
 };
-Opcodes.prototype.CSP = function(args) {console.log('CSP: Not Implemented');iptr += 4};
+Opcodes.prototype.CSP = function(args) {
+	// if y > 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSP: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() > 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSPI = function(args) {
 	Opcodes.prototype.CSP(args);
 };
@@ -244,7 +373,20 @@ Opcodes.prototype.CSWAP = function(args) {console.log('CSWAP: Not Implemented');
 Opcodes.prototype.CSWAPI = function(args) {
 	Opcodes.prototype.CSWAP(args);
 };
-Opcodes.prototype.CSZ = function(args) {console.log('CSZ: Not Implemented');iptr += 4};
+Opcodes.prototype.CSZ = function(args) {
+	// if y == 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('CSZ: ' + args);	
+	var y = Registers[getReg(args[1])];
+	if (y.getInt64() == 0) {
+		var z = getValue(args[2]);
+		var x = copyValue(z);
+		Registers[getReg(args[0])] = x;
+	}
+	iptr += 4;
+};
 Opcodes.prototype.CSZI = function(args) {
 	Opcodes.prototype.CSZ(args);
 };
@@ -263,10 +405,10 @@ Opcodes.prototype.FADD = function(args) {
 	// var regc = args[2];
 	debug('FADD: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.setFloat64(b.float64[0] + c.float64[0]);
-	registers[getReg(args[0])] = a;		
+	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
 Opcodes.prototype.FCMP = function(args) {console.log('FCMP: Not Implemented');iptr += 4};
@@ -278,10 +420,10 @@ Opcodes.prototype.FDIV = function(args) {
 	// var regc = args[2];
 	debug('FDIV: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.setFloat64(b.float64[0] / c.float64[0]);
-	registers[getReg(args[0])] = a;		
+	Registers[getReg(args[0])] = a;		
 	iptr += 4;		
 };
 Opcodes.prototype.FEQL = function(args) {console.log('FEQL: Not Implemented');iptr += 4};
@@ -297,7 +439,7 @@ Opcodes.prototype.FLOT = function(args) {
 	var a = new ByteArray();
 	var b = getValue(args[1]);
 	a.setFloat64(b.getInt64());
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.FLOTI = function(args) {
@@ -312,10 +454,10 @@ Opcodes.prototype.FMUL = function(args) {
 	// var regc = args[2];
 	debug('FMUL: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.setFloat64(b.float64[0] * c.float64[0]);
-	registers[getReg(args[0])] = a;		
+	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
 Opcodes.prototype.FREM = function(args) {console.log('FREM: Not Implemented');iptr += 4};
@@ -325,9 +467,9 @@ Opcodes.prototype.FSQRT = function(args) {
 	// var regb = args[1];
 	debug('FSQRT: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])]
+	var b = Registers[getReg(args[1])]
 	a.setFloat64(Math.sqrt(b.float64[0]));
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.FSUB = function(args) {
@@ -337,10 +479,10 @@ Opcodes.prototype.FSUB = function(args) {
 	// var regc = args[2];
 	debug('FSUB: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.setFloat64(b.float64[0] - c.float64[0]);
-	registers[getReg(args[0])] = a;		
+	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
 Opcodes.prototype.FUN = function(args) {console.log('FUN: Not Implemented');iptr += 4};
@@ -362,17 +504,17 @@ Opcodes.prototype.LDB = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDB: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	// byteoffset gives us the position of the byte we want
 	var byteoffset = Math.abs((memaddr % 4) * 8 - 24);
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDBU:' + args);
+		warn('Loading Memory from unset location with LDBU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xff;
@@ -384,7 +526,7 @@ Opcodes.prototype.LDB = function(args) {
 			val.uint64[1] = ~0;
 		}
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDBI = function(args) {
@@ -394,24 +536,24 @@ Opcodes.prototype.LDBU = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDBU: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	// byteoffset gives us the position of the byte we want
 	var byteoffset = Math.abs((memaddr % 4) * 8 - 24);
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDBU:' + args);
+		warn('Loading Memory from unset location with LDBU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xff;
 		val.uint64[0] = (memval.uint64[bytepos] >> byteoffset) & mask;
 		val.uint64[1] = 0;
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDBUI = function(args) {
@@ -421,22 +563,22 @@ Opcodes.prototype.LDHT = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDHT: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDHT:' + args);
+		warn('Loading Memory from unset location with LDHT:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
 		val.uint64[0] = 0;
 		val.uint64[1] = memval.uint64[bytepos];
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDHTI = function(args) {
@@ -446,18 +588,18 @@ Opcodes.prototype.LDO = function(args) {
 	// reg = args[0];
 	// memaddr = args[1] + args[2];
 	debug('LDO:' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();	
 	memaddr -= memaddr % 8;
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	if (!memval) {
-		warn('Loading memory from unset location with LDO:' + args);
+		warn('Loading Memory from unset location with LDO:' + args);
 		memval = new ByteArray();
 		memval.setUint64(0);		
 	}
 	var regval = copyValue(memval);
-	registers[getReg(args[0])] = regval;
+	Registers[getReg(args[0])] = regval;
 	iptr += 4;
 };
 Opcodes.prototype.LDOI = function(args) {
@@ -481,22 +623,22 @@ Opcodes.prototype.LDT = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDT: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDT:' + args);
+		warn('Loading Memory from unset location with LDT:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
 		val.uint64[0] = memval.uint64[bytepos];
 		val.uint64[1] = (val.int64[0] < 0) ? ~0 : 0;
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDTI = function(args) {
@@ -506,22 +648,22 @@ Opcodes.prototype.LDTU = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDTU: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDTU:' + args);
+		warn('Loading Memory from unset location with LDTU:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
 		val.uint64[0] = memval.uint64[bytepos];
 		val.uint64[1] = 0;
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDTUI = function(args) {
@@ -535,17 +677,17 @@ Opcodes.prototype.LDW = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDW: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	// the wideoffset gives us the 16 bits that we want to keep in the tetra
 	var wideoffset = ((Math.floor((memaddr % 4) / 2) + 1) % 2) * 16;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDWU:' + args);
+		warn('Loading Memory from unset location with LDWU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xffff;
@@ -557,7 +699,7 @@ Opcodes.prototype.LDW = function(args) {
 			val.uint64[1] = ~0;
 		}
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDWI = function(args) {
@@ -567,24 +709,24 @@ Opcodes.prototype.LDWU = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('LDWU: ' + args);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	// the wideoffset gives us the 16 bits that we want to keep in the tetra
 	var wideoffset = ((Math.floor((memaddr % 4) / 2) + 1) % 2) * 16;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading memory from unset location with LDWU:' + args);
+		warn('Loading Memory from unset location with LDWU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xffff;
 		val.uint64[0] = (memval.uint64[bytepos] >> wideoffset) & mask;
 		val.uint64[1] = 0;
 	}
-	registers[getReg(args[0])] = val;	
+	Registers[getReg(args[0])] = val;	
 	iptr += 4;
 };
 Opcodes.prototype.LDWUI = function(args) {
@@ -617,11 +759,11 @@ Opcodes.prototype.NAND = function(args) {
 	// var regc = args[2];
 	debug('NAND: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = ~(b.uint64[0] & c.uint64[0]);
 	a.uint64[1] = ~(b.uint64[1] & c.uint64[1]);
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.NANDI = function(args) {
@@ -639,12 +781,12 @@ Opcodes.prototype.NEG = function(args) {
 		var b = getValue(args[2]);
 		a.setFromString(args[1]);
 	} else {
-		var b = registers[getReg(args[1])];
+		var b = Registers[getReg(args[1])];
 		a.setInt64(0);
 	}
 	a.int64[0] -= b.int64[0];
 	a.int64[1] -= b.int64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.NEGI = function(args) {
@@ -662,12 +804,12 @@ Opcodes.prototype.NEGU = function(args) {
 		var b = getValue(args[2]);
 		a.setFromString(args[1]);
 	} else {
-		var b = registers[getReg(args[1])];
+		var b = Registers[getReg(args[1])];
 		a.setInt64(0);
 	}
 	a.uint64[0] -= b.uint64[0];
 	a.uint64[1] -= b.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.NEGUI = function(args) {
@@ -680,11 +822,11 @@ Opcodes.prototype.NOR = function(args) {
 	// var c = args[2];
 	debug('NOR: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = ~(b.uint64[0] | c.uint64[0]);
 	a.uint64[1] = ~(b.uint64[1] | c.uint64[1]);
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.NORI = function(args) {
@@ -697,11 +839,11 @@ Opcodes.prototype.NXOR = function(args) {
 	// var regc = args[2];
 	debug('NXOR: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = ~(b.uint64[0] ^ c.uint64[0]);
 	a.uint64[1] = ~(b.uint64[1] ^ c.uint64[1]);
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.NXORI = function(args) {
@@ -718,11 +860,11 @@ Opcodes.prototype.OR = function(args) {
 	// var regc = args[2];
 	debug('OR: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = b.uint64[0] | c.uint64[0];
 	a.uint64[1] = b.uint64[1] | c.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ORH = function(args) {console.log('ORH: Not Implemented');iptr += 4};
@@ -739,11 +881,11 @@ Opcodes.prototype.ORN = function(args) {
 	// var regc = args[2];
 	debug('ORN: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = b.uint64[0] | ~c.uint64[0];
 	a.uint64[1] = b.uint64[1] | ~c.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.ORNI = function(args) {
@@ -826,18 +968,18 @@ Opcodes.prototype.STB = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('STB: ' + args);
-	var val = registers[getReg(args[0])];
-	var addr = registers[getReg(args[1])];
+	var val = Registers[getReg(args[0])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var byteoffset = Math.abs((memaddr % 4) * 8 - 24);
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	if (!memval) {
 		memval = new ByteArray();
 		memval.setUint64(0);
-		memory[memaddr] = memval;
+		Memory[memaddr] = memval;
 	}
 	var mask = 0xff;
 	memval.uint64[bytepos] &= ~(mask << byteoffset);
@@ -859,11 +1001,11 @@ Opcodes.prototype.STCO = function(args) {
 	debug('STCO: ' + args);
 	var val = new  ByteArray();
 	val.setFromString(args[0]);
-	var addr = registers[getReg(args[1])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	memory[memaddr] = val; 
+	Memory[memaddr] = val; 
 	iptr += 4;
 };
 Opcodes.prototype.STCOI = function(args) {
@@ -873,17 +1015,17 @@ Opcodes.prototype.STHT = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('STHT: ' + args);
-	var val = registers[getReg(args[0])];
-	var addr = registers[getReg(args[1])];
+	var val = Registers[getReg(args[0])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	if (!memval) {
 		memval = new ByteArray();
 		memval.setUint64(0);
-		memory[memaddr] = memval;
+		Memory[memaddr] = memval;
 	}
 	memval.uint64[bytepos] = val.uint64[1];
 	iptr += 4;
@@ -895,12 +1037,12 @@ Opcodes.prototype.STO = function(args) {
 	// reg = args[0]
 	// addr = args[1] + args[2]
 	debug('STO: ' + args);
-	var val = copyValue(registers[getReg(args[0])]);
-	var addr = registers[getReg(args[1])];
+	var val = copyValue(Registers[getReg(args[0])]);
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	memory[memaddr] = val; 
+	Memory[memaddr] = val; 
 	iptr += 4;
 };
 Opcodes.prototype.STOI = function(args) {
@@ -924,17 +1066,17 @@ Opcodes.prototype.STT = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('STT: ' + args);
-	var val = registers[getReg(args[0])];
-	var addr = registers[getReg(args[1])];
+	var val = Registers[getReg(args[0])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	if (!memval) {
 		memval = new ByteArray();
 		memval.setUint64(0);
-		memory[memaddr] = memval;
+		Memory[memaddr] = memval;
 	}
 	memval.uint64[bytepos] = val.uint64[0];
 	iptr += 4;
@@ -952,18 +1094,18 @@ Opcodes.prototype.STW = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
 	debug('STW: ' + args);
-	var val = registers[getReg(args[0])];
-	var addr = registers[getReg(args[1])];
+	var val = Registers[getReg(args[0])];
+	var addr = Registers[getReg(args[1])];
 	var offset = getValue(args[2]);
 	var memaddr = addr.getUint64() + offset.getUint64();
 	var wideoffset = ((Math.floor((memaddr % 4) / 2) + 1) % 2) * 16;
 	var bytepos = (Math.floor((memaddr % 8) / 4) + 1) % 2;
 	memaddr -= memaddr % 8; // take the floor to the nearest multiple of 8
-	var memval = memory[memaddr];
+	var memval = Memory[memaddr];
 	if (!memval) {
 		memval = new ByteArray();
 		memval.setUint64(0);
-		memory[memaddr] = memval;
+		Memory[memaddr] = memval;
 	}
 	var mask = 0xffff;
 	memval.uint64[bytepos] &= ~(mask << wideoffset);
@@ -986,7 +1128,7 @@ Opcodes.prototype.SUB = function(args) {
 	// var regc = args[2];
 	debug('SUB: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	var offset = 0;
 	a.uint64[0] = b.uint64[0] - c.uint64[0];
@@ -994,7 +1136,7 @@ Opcodes.prototype.SUB = function(args) {
 		offset = 1;
 	}
 	a.uint64[1] = b.uint64[1] - c.uint64[1] - offset;
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.SUBI = function(args) {
@@ -1007,7 +1149,7 @@ Opcodes.prototype.SUBU = function(args) {
 	// var regc = args[2];
 	debug('SUBU: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	var offset = 0;
 	a.uint64[0] = b.uint64[0] - c.uint64[0];
@@ -1015,7 +1157,7 @@ Opcodes.prototype.SUBU = function(args) {
 		offset = 1;
 	}
 	a.uint64[1] = b.uint64[1] - c.uint64[1] - offset;
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.SUBUI = function(args) {
@@ -1052,45 +1194,181 @@ Opcodes.prototype.XOR = function(args) {
 	// var regc = args[2];
 	debug('XOR: ' + args);
 	var a = new ByteArray();
-	var b = registers[getReg(args[1])];
+	var b = Registers[getReg(args[1])];
 	var c = getValue(args[2]);
 	a.uint64[0] = b.uint64[0] ^ c.uint64[0];
 	a.uint64[1] = b.uint64[1] ^ c.uint64[1];
-	registers[getReg(args[0])] = a;
+	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
 Opcodes.prototype.XORI = function(args) {
 	Opcodes.prototype.XOR(args);
 };
-Opcodes.prototype.ZSEV = function(args) {console.log('ZSEV: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSEV = function(args) {
+	// if y % 2 == 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSEV: ' + args);
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.uint64[0] % 2 == 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.ZSEVI = function(args) {
 	Opcodes.prototype.ZSEV(args);
 };
-Opcodes.prototype.ZSN = function(args) {console.log('ZSN: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSN = function(args) {
+	// if y < 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSN: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() < 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.ZSNI = function(args) {
 	Opcodes.prototype.ZSN(args);
 };
-Opcodes.prototype.ZSNN = function(args) {console.log('ZSNN: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSNN = function(args) {
+	// if y >= 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSNN: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() >= 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.ZSNNI = function(args) {
 	Opcodes.prototype.ZSNN(args);
 };
-Opcodes.prototype.ZSNP = function(args) {console.log('ZSNP: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSNP = function(args) {
+	// if y <= 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSNP: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() <= 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.ZSNPI = function(args) {
 	Opcodes.prototype.ZSNP(args);
 };
-Opcodes.prototype.ZSNZ = function(args) {console.log('ZSNZ: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSNZ = function(args) {
+	// if y != 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSNZ: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() != 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.ZSNZI = function(args) {
 	Opcodes.prototype.ZSNZ(args);
 };
-Opcodes.prototype.ZSOD = function(args) {console.log('ZSOD: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSOD = function(args) {
+	// if y % 2 == 1 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSOD: ' + args);
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.uint64[0] % 2 == 1) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;	
+	iptr += 4;
+};
 Opcodes.prototype.ZSODI = function(args) {
 	Opcodes.prototype.ZSOD(args);
 };
-Opcodes.prototype.ZSP = function(args) {console.log('ZSP: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSP = function(args) {
+	// if y > 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSP: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() > 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;	
+	iptr += 4;
+};
 Opcodes.prototype.ZSPI = function(args) {
 	Opcodes.prototype.ZSP(args);
 };
-Opcodes.prototype.ZSZ = function(args) {console.log('ZSZ: Not Implemented');iptr += 4};
+Opcodes.prototype.ZSZ = function(args) {
+	// if y == 0; x = z;
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('ZSZ: ' + args);	
+	var y = Registers[getReg(args[1])];
+	var x;
+	if (y.getInt64() == 0) {
+		var z = getValue(args[2]);
+		x = copyValue(z);
+	} else {
+		x = new ByteArray();
+		x.setUint64(0);
+	}
+	Registers[getReg(args[0])] = x;	
+	iptr += 4;
+};
 Opcodes.prototype.ZSZI = function(args) {
 	Opcodes.prototype.ZSZ(args);
 };
@@ -1102,15 +1380,15 @@ var nop = function(x){
 
 
 function run() {
-	var ops = new Opcodes();
+	var Ops = new Opcodes();
 	console.log('Started execution at addr: ' + iptr);
 	var numops = 0;
 
 	while (iptr !== 'undefined') {
-		// get the current instruction from memory at 'iptr'
-		var icurr = memory[iptr];
+		// get the current instruction from our Code at 'iptr'
+		var icurr = Code[iptr];
 		// find the operation in 'ops' if we can't find it, we turn into a nop
-		var op = ops[icurr[0]] || nop;
+		var op = Ops[icurr[0]] || nop;
 		// get the arguments for the operation, if none set to null
 		var args = icurr[1] ? icurr[1].split(',') : null;
 		// perform the operation, passing in the args
@@ -1123,13 +1401,13 @@ function run() {
 }
 
 
-function loadIntoMem(code) {
-	for (var i = 0; i < code.length*4; i+=4) {
-		// console.log(code[i]);
+function loadIntoMem(src) {
+	for (var i = 0; i < src.length*4; i+=4) {
+		// console.log(src[i]);
 		// We have line[0] = lable
 		// We have line[1] = opcode
 		// We have line[2] = args
-		var line = code[i/4];
+		var line = src[i/4];
 		if (line[0]) {
 			// we have a lable so process it
 			if (line[1] === 'IS') {
@@ -1137,29 +1415,29 @@ function loadIntoMem(code) {
 				// we are an 'IS' statement
 				if (line[2][0] === '$') {
 					// set up a ref to an actual register
-					regLabels[line[0]] = line[2];
+					RegLabels[line[0]] = line[2];
 				} else {
 					// we are a constant, so set it up
 					var val = new ByteArray();
 					val.setFromString(line[2]);
-					constants[line[0]] = val;
+					Constants[line[0]] = val;
 				}
 				line = ''; // set to empty, so we dont acutally put in mem
 			} else if(line[1] === 'GREG') {
 				// we are global register, so add to the lables and set the val
 				var greg = '$' + --gregptr;
-				regLabels[line[0]] = greg;
+				RegLabels[line[0]] = greg;
 				var val = new ByteArray();
 				val.setFromString(line[2]);
-				registers[greg] = val;
+				Registers[greg] = val;
 			} else {
-				// we are a normal label, add to the labels list
-				labels[line[0]] = i;
+				// we are a normal label, add to the Labels list
+				Labels[line[0]] = i;
 			}
 		}
-		memory[i] = [line[1], line[2]];
+		Code[i] = [line[1], line[2]];
 	}
-	stkptr = code.length*4;
+	stkptr = 0;
 }
 
 
@@ -1172,12 +1450,12 @@ function readSrcFile(fname) {
 	return data;
 }
 
-code = readSrcFile('../mms/test.mms');
-loadIntoMem(code);
-console.log(regLabels);
-iptr = labels['Main'];
-// console.log(registers);
+src = readSrcFile('../mms/test.mms');
+loadIntoMem(src);
+console.log(RegLabels);
+iptr = Labels['Main'];
+// console.log(Registers);
 run();
-console.log(registers);
-// console.log(memory[ 64 - (64 % 8) ]);
+console.log(Registers);
+// console.log(Memory[ 64 - (64 % 8) ]);
 
