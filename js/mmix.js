@@ -1,20 +1,22 @@
 
-fs = require('fs');
-types = require('./types.js');
-ByteArray = types.ByteArray;
+'use strict';
 
+var fs = require('fs');
+var types = require('./types.js');
+var ByteArray = types.ByteArray;
 
 function MmixInterpreter() {}
 
-var Registers = []; // array of registers, registers look like $0, $1 etc.
+var Registers = {}; // array of registers, registers look like $0, $1 etc.
 var RegLabels = {}; // mapping of labels to actual registers eg. {a : $1}
-var SpecialReg = []; // TODO: special registers for overflow and such
+var SpecialReg = {}; // special registers for overflow and such
 var Memory = []; // Our array of Memory cells
 var Code = []; // Array of instructions, sould only have entries on multiples of 8
+var RegStack = []; // list of lists, one for each 'frame' (set of reg's) we push
 var Labels = {}; // mapping of labels to code positions in the Code array 
 var Constants = {}; // mapping of labels to constant values
 var iptr; // instruction pointer
-var stkptr; // current pointer into available Memory
+var stkptr; // current pointer into available Stack
 var gregptr = 255; // points to the last allocated global reg ($255 is alwyas global)
 
 var dbgopts = true;
@@ -50,10 +52,15 @@ function getValue(symbol) {
 	} else if (Constants[symbol]) {
 		// we are a constant
 		return Constants[symbol];
+	} 
+	var	val = new ByteArray();
+	if (Labels[symbol]) {
+		// we are a lable so return the address as a 64 bit val
+		val.setUint64(Labels[symbol]);
+	} else {
+		// we are an immediate so put the val in
+		val.setFromString(symbol);
 	}
-	// we are an immediate so create a new ByteArray and put it in
-	var val = new ByteArray();
-	val.setFromString(symbol);
 	return val;
 }
 
@@ -190,22 +197,126 @@ Opcodes.prototype.BDIF = function(args) {console.log('BDIF: Not Implemented');ip
 Opcodes.prototype.BDIFI = function(args) {
 	Opcodes.prototype.BDIF(args);
 };
-Opcodes.prototype.BEV = function(args) {console.log('BEV: Not Implemented');iptr += 4};
-Opcodes.prototype.BEVB = function(args) {console.log('BEVB: Not Implemented');iptr += 4};
-Opcodes.prototype.BN = function(args) {console.log('BN: Not Implemented');iptr += 4};
-Opcodes.prototype.BNB = function(args) {console.log('BNB: Not Implemented');iptr += 4};
-Opcodes.prototype.BNN = function(args) {console.log('BNN: Not Implemented');iptr += 4};
-Opcodes.prototype.BNNB = function(args) {console.log('BNNB: Not Implemented');iptr += 4};
-Opcodes.prototype.BNP = function(args) {console.log('BNP: Not Implemented');iptr += 4};
-Opcodes.prototype.BNPB = function(args) {console.log('BNPB: Not Implemented');iptr += 4};
-Opcodes.prototype.BNZ = function(args) {console.log('BNZ: Not Implemented');iptr += 4};
-Opcodes.prototype.BNZB = function(args) {console.log('BNZB: Not Implemented');iptr += 4};
-Opcodes.prototype.BOD = function(args) {console.log('BOD: Not Implemented');iptr += 4};
-Opcodes.prototype.BODB = function(args) {console.log('BODB: Not Implemented');iptr += 4};
-Opcodes.prototype.BP = function(args) {console.log('BP: Not Implemented');iptr += 4};
-Opcodes.prototype.BPB = function(args) {console.log('BPB: Not Implemented');iptr += 4};
-Opcodes.prototype.BZ = function(args) {console.log('BZ: Not Implemented');iptr += 4};
-Opcodes.prototype.BZB = function(args) {console.log('BZB: Not Implemented');iptr += 4};
+Opcodes.prototype.BEV = function(args) {
+	// if x % 2 == 0; iptr += offset;
+	// x = args[0]
+	debug('BEV: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.uint64[0] % 2 == 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BEVB = function(args) {
+	Opcodes.prototype.BEV(args);
+};
+Opcodes.prototype.BN = function(args) {
+	// if x < 0; iptr += offset;
+	// x = args[0]
+	debug('BN: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() < 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BNB = function(args) {
+	Opcodes.prototype.BN(args);
+};
+Opcodes.prototype.BNN = function(args) {
+	// if x >= 0; iptr += offset;
+	// x = args[0]
+	debug('BNN: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() >= 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BNNB = function(args) {
+	Opcodes.prototype.BNN(args);
+};
+Opcodes.prototype.BNP = function(args) {
+	// if x < 0; iptr += offset;
+	// x = args[0]
+	debug('BNP: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() <= 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BNPB = function(args) {
+	Opcodes.prototype.BNP(args);
+};
+Opcodes.prototype.BNZ = function(args) {
+	// if x != 0; iptr += offset;
+	// x = args[0]
+	debug('BNZ: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() != 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BNZB = function(args) {
+	Opcodes.prototype.BNZ(args);
+};
+Opcodes.prototype.BOD = function(args) {
+	// if x % 2 == 1; iptr += offset;
+	// x = args[0]
+	debug('BOD: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.uint64[0] % 2 == 1) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BODB = function(args) {
+	Opcodes.prototype.BOD(args);
+};
+Opcodes.prototype.BP = function(args) {
+	// if x > 0; iptr += offset;
+	// x = args[0]
+	debug('BP: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() > 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BPB = function(args) {
+	Opcodes.prototype.BP(args);
+};
+Opcodes.prototype.BZ = function(args) {
+	// if x == 0; iptr += offset;
+	// x = args[0]
+	debug('BZ: ' + args);
+	var x = Registers[getReg(args[0])];
+	if (x.getInt64() == 0) {
+		var reladdr = getValue(args[1]);
+		iptr += 4*reladdr.getInt64();
+	} else {
+		iptr += 4;
+	}
+};
+Opcodes.prototype.BZB = function(args) {
+	Opcodes.prototype.BZ(args);
+};
 Opcodes.prototype.CMP = function(args) {
 	// a > b ? 1 : -1, 0 if eq
 	// res = args[0]
@@ -488,7 +599,18 @@ Opcodes.prototype.FUNE = function(args) {console.log('FUNE: Not Implemented');ip
 Opcodes.prototype.GET = function(args) {console.log('GET: Not Implemented');iptr += 4};
 Opcodes.prototype.GETA = function(args) {console.log('GETA: Not Implemented');iptr += 4};
 Opcodes.prototype.GETAB = function(args) {console.log('GETAB: Not Implemented');iptr += 4};
-Opcodes.prototype.GO = function(args) {console.log('GO: Not Implemented');iptr += 4};
+Opcodes.prototype.GO = function(args) {
+	// oldaddr = args[0] = iptr + 4
+	debug('GO: ' + args);
+	var addr = Registers[getReg(args[1])],
+		offset = getValue(args[2]),
+		oldaddr = new ByteArray();
+	oldaddr.setUint64(iptr + 4);
+	Registers[getReg(args[0])] = oldaddr;
+	console.log(addr.getUint64() + offset.getUint64());
+	console.log(Labels['End']);
+	iptr = addr.getUint64() + offset.getUint64();
+};
 Opcodes.prototype.GOI = function(args) {
 	Opcodes.prototype.GO(args);
 };
@@ -496,7 +618,12 @@ Opcodes.prototype.INCH = function(args) {console.log('INCH: Not Implemented');ip
 Opcodes.prototype.INCL = function(args) {console.log('INCL: Not Implemented');iptr += 4};
 Opcodes.prototype.INCMH = function(args) {console.log('INCMH: Not Implemented');iptr += 4};
 Opcodes.prototype.INCML = function(args) {console.log('INCML: Not Implemented');iptr += 4};
-Opcodes.prototype.JMP = function(args) {console.log('JMP: Not Implemented');iptr += 4};
+Opcodes.prototype.JMP = function(args) {
+	// relative address = args[0]
+	debug('JMP: ' + args);
+	var reladdr = getValue(args[0]);
+	iptr += 4*reladdr.getInt64();
+};
 Opcodes.prototype.JMPB = function(args) {console.log('JMPB: Not Implemented');iptr += 4};
 Opcodes.prototype.LDB = function(args) {
 	// val = args[0]
@@ -889,22 +1016,54 @@ Opcodes.prototype.ORN = function(args) {
 Opcodes.prototype.ORNI = function(args) {
 	Opcodes.prototype.ORN(args);
 };
-Opcodes.prototype.PBEV = function(args) {console.log('PBEV: Not Implemented');iptr += 4};
-Opcodes.prototype.PBEVB = function(args) {console.log('PBEVB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBN = function(args) {console.log('PBN: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNB = function(args) {console.log('PBNB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNN = function(args) {console.log('PBNN: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNNB = function(args) {console.log('PBNNB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNP = function(args) {console.log('PBNP: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNPB = function(args) {console.log('PBNPB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNZ = function(args) {console.log('PBNZ: Not Implemented');iptr += 4};
-Opcodes.prototype.PBNZB = function(args) {console.log('PBNZB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBOD = function(args) {console.log('PBOD: Not Implemented');iptr += 4};
-Opcodes.prototype.PBODB = function(args) {console.log('PBODB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBP = function(args) {console.log('PBP: Not Implemented');iptr += 4};
-Opcodes.prototype.PBPB = function(args) {console.log('PBPB: Not Implemented');iptr += 4};
-Opcodes.prototype.PBZ = function(args) {console.log('PBZ: Not Implemented');iptr += 4};
-Opcodes.prototype.PBZB = function(args) {console.log('PBZB: Not Implemented');iptr += 4};
+Opcodes.prototype.PBEV = function(args) {
+	Opcodes.prototype.BEV(args);
+};
+Opcodes.prototype.PBEVB = function(args) {
+	Opcodes.prototype.PBEV(args);
+};
+Opcodes.prototype.PBN = function(args) {
+	Opcodes.prototype.BN(args);
+};
+Opcodes.prototype.PBNB = function(args) {
+	Opcodes.prototype.PBN(args);
+};
+Opcodes.prototype.PBNN = function(args) {
+	Opcodes.prototype.BNN(args);
+};
+Opcodes.prototype.PBNNB = function(args) {
+	Opcodes.prototype.PBNN(args);
+};
+Opcodes.prototype.PBNP = function(args) {
+	Opcodes.prototype.BNP(args);
+};
+Opcodes.prototype.PBNPB = function(args) {
+	Opcodes.prototype.PBNP(args);
+};
+Opcodes.prototype.PBNZ = function(args) {
+	Opcodes.prototype.BNZ(args);
+};
+Opcodes.prototype.PBNZB = function(args) {
+	Opcodes.prototype.PBNZ(args);
+};
+Opcodes.prototype.PBOD = function(args) {
+	Opcodes.prototype.PBOD(args);
+};
+Opcodes.prototype.PBODB = function(args) {
+	Opcodes.prototype.PBOD(args);
+};
+Opcodes.prototype.PBP = function(args) {
+	Opcodes.prototype.BP(args);
+};
+Opcodes.prototype.PBPB = function(args) {
+	Opcodes.prototype.PBP(args);
+};
+Opcodes.prototype.PBZ = function(args) {
+	Opcodes.prototype.BZ(args);
+};
+Opcodes.prototype.PBZB = function(args) {
+	Opcodes.prototype.PBZ(args);
+};
 Opcodes.prototype.POP = function(args) {console.log('POP: Not Implemented');iptr += 4};
 Opcodes.prototype.PREGO = function(args) {console.log('PREGO: Not Implemented');iptr += 4};
 Opcodes.prototype.PREGOI = function(args) {
@@ -959,6 +1118,7 @@ Opcodes.prototype.SRI = function(args) {
 	Opcodes.prototype.SR(args);
 };
 Opcodes.prototype.SRU = function(args) {
+	console.log('>>>>>>>>>>> SRU DOESNT WORK on shifts >= 32 bits ... yet!');
 	// a = b >> c
 	// a = args[0]
 	// b = args[1]
@@ -1410,7 +1570,6 @@ function run() {
 		var args = icurr[1] ? icurr[1].split(',') : null;
 		// perform the operation, passing in the args
 		op(args);
-		//op.apply(this, args);
 		numops++;
 	}
 
@@ -1439,7 +1598,7 @@ function loadIntoMem(src) {
 					val.setFromString(line[2]);
 					Constants[line[0]] = val;
 				}
-				line = ''; // set to empty, so we dont acutally put in mem
+				line = ''; // set to empty, so we dont acutally put in mem (well, Code)
 			} else if(line[1] === 'GREG') {
 				// we are global register, so add to the lables and set the val
 				var greg = '$' + --gregptr;
@@ -1459,7 +1618,7 @@ function loadIntoMem(src) {
 
 
 function readSrcFile(fname) {
-	data = fs.readFileSync(fname, 'utf8');
+	var data = fs.readFileSync(fname, 'utf8');
 	data = data.split('\n');
 	for (var i = 0; i < data.length; i++) {
 		data[i] = data[i].split('\t');
@@ -1476,7 +1635,4 @@ iptr = Labels['Main'];
 // console.log(Registers);
 run();
 console.log(Registers);
-
-// for tri_test
-// console.log(Registers['$3'].getFloat64());
-
+	

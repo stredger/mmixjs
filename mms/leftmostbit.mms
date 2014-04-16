@@ -4,7 +4,7 @@ t	IS	$3
 
 zero	GREG	0
 
-Main	ADDU	x,zero,#ff
+Main	ADDU	x,zero,#8080
 
 	SRU	t,x,1
 	OR	y,x,t

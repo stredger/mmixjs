@@ -1,14 +1,20 @@
 a	IS	$0
 b	IS	$1	
-c	IS	$2
-d	IS	$3
-e	IS	$4
-f	IS	$5
-g	IS	$6
-h	IS	$7
+c	IS	70
+d	IS	#0123456789abcdef
+e	IS	$2
+f	IS	-1
+g	IS	#f
 
-x1	GREG	0
-x2	GREG	123456
+zero	GREG	0
+x2	GREG	12345679800000
 	
-Main	SUB	a,x1,x2
-	TRAP	0,Halt,0
+
+
+
+	ADD	e,zero,f
+	GO	a,zero,End
+Main	ADD	a,zero,f
+	BN	a,-3
+	ADD	b,zero,f	
+End	TRAP	0,Halt,0
