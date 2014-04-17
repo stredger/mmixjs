@@ -499,11 +499,53 @@ Opcodes.prototype.CSZ = function(args) {
 Opcodes.prototype.CSZI = function(args) {
 	Opcodes.prototype.CSZ(args);
 };
-Opcodes.prototype.DIV = function(args) {console.log('DIV: Not Implemented');iptr += 4};
+Opcodes.prototype.DIV = function(args) {
+	// x = y / z
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]		
+	debug('DIV: ' + args);
+	var x = new ByteArray();
+	var y = Registers[getReg(args[1])];
+	var z = getValue(args[2]);
+	var yval = y.getInt64();
+	var zval = z.getInt64();
+	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
+	if (Math.abs(yval) > large || Math.abs(zval) > large) {
+		warn('Division with possible loss of precision:' + args);
+	}
+	console.log(yval);
+	console.log(zval);
+	console.log(zval ? yval / zval : 0);
+	x.setInt64( zval ? yval / zval : 0 );
+	Registers[getReg(args[0])] = x;
+	SpecialReg.rR = zval ? yval % zval : yval;	
+	iptr += 4
+};
 Opcodes.prototype.DIVI = function(args) {
 	Opcodes.prototype.DIV(args);
 };
-Opcodes.prototype.DIVU = function(args) {console.log('DIVU: Not Implemented');iptr += 4};
+Opcodes.prototype.DIVU = function(args) {
+	// x = y / z
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]
+	debug('DIVU: ' + args);
+	var x = new ByteArray();
+	var y = Registers[getReg(args[1])];
+	var z = getValue(args[2]);
+	var yval = y.getUint64();
+	var zval = z.getUint64();
+	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
+	if (yval > large || zval > large) {
+		warn('Division with possible loss of precision:' + args);
+	}
+	// missing rD stuff??	
+	x.setInt64( zval ? yval / zval : 0 );
+	Registers[getReg(args[0])] = x;
+	SpecialReg.rR = zval ? yval % zval : yval;	
+	iptr += 4
+};
 Opcodes.prototype.DIVUI = function(args) {
 	Opcodes.prototype.DIVU(args);
 };
@@ -861,11 +903,47 @@ Opcodes.prototype.MOR = function(args) {console.log('MOR: Not Implemented');iptr
 Opcodes.prototype.MORI = function(args) {
 	Opcodes.prototype.MOR(args);
 };
-Opcodes.prototype.MUL = function(args) {console.log('MUL: Not Implemented');iptr += 4};
+Opcodes.prototype.MUL = function(args) {
+	// x = y * z
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]		
+	debug('MUL: ' + args);
+	var x = new ByteArray();
+	var y = Registers[getReg(args[1])];
+	var z = getValue(args[2]);
+	var yval = y.getInt64();
+	var zval = z.getInt64();
+	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
+	if (Math.abs(yval * zval) > large) {
+		warn('Multiplication with possible loss of precision:' + args);
+	}
+	x.setInt64(yval * zval);
+	Registers[getReg(args[0])] = x;
+	iptr += 4
+};
 Opcodes.prototype.MULI = function(args) {
 	Opcodes.prototype.MUL(args);
 };
-Opcodes.prototype.MULU = function(args) {console.log('MULU: Not Implemented');iptr += 4};
+Opcodes.prototype.MULU = function(args) {
+	// x = y * z
+	// x = args[0]
+	// y = args[1]
+	// z = args[2]		
+	debug('MULU: ' + args);
+	var x = new ByteArray();
+	var y = Registers[getReg(args[1])];
+	var z = getValue(args[2]);
+	var lowbits = y.uint64[0] * z.uint64[0];
+	x.uint64[0] = lowbits % 4294967296;
+	x.uint64[1] = lowbits / 4294967296;
+	var highbits = y.uint64[0] * z.uint64[1] + y.uint64[1] * z.uint64[0];
+	// multiplying both the high bits together results in
+	//  overflow so just dont do it
+	x.uint64[1] += highbits;
+	Registers[getReg(args[0])] = x;
+	iptr += 4;
+};
 Opcodes.prototype.MULUI = function(args) {
 	Opcodes.prototype.MULU(args);
 };

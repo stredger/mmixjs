@@ -45,10 +45,16 @@ ByteArray.prototype.setInt64 = function(num) {
 ByteArray.prototype.getInt64 = function() {
 	if (this.int64[1] < 0) {
 		// If we are negative then we have to either do the 2's complement on 
-		//  the high bits or the low bits, and just compliment the other. If the  
+		//  the high bits or the low bits, and compliment the other. If the  
 		//  low bits are all 0 then we know we have to 2's comp the high bits as 
-		//  we had overflow when we 2's comped it before. This get the magnitude 
-		//  of the value, we negate to get the actual val back.
+		//  we had overflow when we 2's comped it before. One final case is when 
+		//  we have a negative number in 2^31 -> 2^32. ie the high 32 bits are all 1, 
+		//  but the sign bit of the low 32 is 0. Here just subtract the low bits from 2^32
+		// In all cases we first get the magnitude of the value,
+		//  then negate to get the actual val back.
+		if (~this.uint64[1] == 0 && this.int64[0] >= 0) {
+			return -(4294967296 - this.uint64[0]);
+		}
 		var lowbits = (this.uint64[0] == 0) ? ~(this.uint64[0]): ~(this.uint64[0]) + 1;
 		var highbits = (this.uint64[0] == 0) ? ~(this.uint64[1]) + 1: ~(this.uint64[1]);
 		return -(lowbits + 4294967296*highbits);
@@ -107,3 +113,11 @@ ByteArray.prototype.toString = function() {
 }
 
 exports.ByteArray = ByteArray;
+
+
+var a = new ByteArray();
+a.setInt64(-1284967191);
+console.log(a);
+console.log(a.getInt64());
+
+// 0xffffffff00000001

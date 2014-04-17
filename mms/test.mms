@@ -9,12 +9,9 @@ g	IS	#f
 zero	GREG	0
 x2	GREG	12345679800000
 	
-
-
-
 	ADD	e,zero,f
 	GO	a,zero,End
 Main	ADD	a,zero,f
-	BN	a,-3
-	ADD	b,zero,f	
+	MUL	b,a,4294967296
+	DIV	e,b,4294967296	
 End	TRAP	0,Halt,0
