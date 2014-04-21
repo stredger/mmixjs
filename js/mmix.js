@@ -1,9 +1,14 @@
 
 'use strict';
 
-var fs = require('fs');
-var types = require('./types.js');
-var ByteArray = types.ByteArray;
+var NodeEnv = false;
+if (typeof window === 'undefined') {
+	var fs = require('fs');
+	var types = require('./types.js');
+	var ByteArray = types.ByteArray;
+	NodeEnv = true;
+}
+
 
 function MmixInterpreter() {}
 
@@ -15,7 +20,7 @@ var Code = []; // Array of instructions, sould only have entries on multiples of
 var RegStack = []; // list of lists, one for each 'frame' (set of reg's) we push
 var Labels = {}; // mapping of labels to code positions in the Code array 
 var Constants = {}; // mapping of labels to constant values
-var iptr; // instruction pointer
+var iptr = 'undefined'; // instruction pointer
 var stkptr; // current pointer into available Stack
 var gregptr = 255; // points to the last allocated global reg ($255 is alwyas global)
 
@@ -27,12 +32,14 @@ function debug(str) {
 }
 
 var warnings = true;
-function warn(str) {
+function warning(str) {
 	if (warnings) {
 		console.log('Warning - ' + str);
+		if (!NodeEnv) {
+			showWarning(str);
+		}
 	}	
 }
-
 
 function getReg(symbol) {
 	return RegLabels[symbol] || symbol;
@@ -97,19 +104,19 @@ Opcodes.prototype.LDA = function(args) {
 	iptr += 4;
 };
 
-Opcodes.prototype['2ADDU'] = function(args) {console.log('2ADDU: Not Implemented');iptr += 4};
+Opcodes.prototype['2ADDU'] = function(args) {warning('2ADDU: Not Implemented');iptr += 4};
 Opcodes.prototype['2ADDUI'] = function(args) {
 	Opcodes.prototype['2ADDU'](args);
 };
-Opcodes.prototype['4ADDU'] = function(args) {console.log('4ADDU: Not Implemented');iptr += 4};
+Opcodes.prototype['4ADDU'] = function(args) {warning('4ADDU: Not Implemented');iptr += 4};
 Opcodes.prototype['4ADDUI'] = function(args) {
 	Opcodes.prototype['4ADDU'](args);
 };
-Opcodes.prototype['8ADDU'] = function(args) {console.log('8ADDU: Not Implemented');iptr += 4};
+Opcodes.prototype['8ADDU'] = function(args) {warning('8ADDU: Not Implemented');iptr += 4};
 Opcodes.prototype['8ADDUI'] = function(args) {
 	Opcodes.prototype['8ADDU'](args);
 };
-Opcodes.prototype['16ADDU'] = function(args) {console.log('16ADDU: Not Implemented');iptr += 4};
+Opcodes.prototype['16ADDU'] = function(args) {warning('16ADDU: Not Implemented');iptr += 4};
 Opcodes.prototype['16ADDUI'] = function(args) {
 	Opcodes.prototype['16ADDU'](args);
 };
@@ -186,14 +193,14 @@ Opcodes.prototype.ANDN = function(args) {
 	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
-Opcodes.prototype.ANDNH = function(args) {console.log('ANDNH: Not Implemented');iptr += 4};
+Opcodes.prototype.ANDNH = function(args) {warning('ANDNH: Not Implemented');iptr += 4};
 Opcodes.prototype.ANDNI = function(args) {
 	Opcodes.prototype.ANDN(args);
 };
-Opcodes.prototype.ANDNL = function(args) {console.log('ANDNL: Not Implemented');iptr += 4};
-Opcodes.prototype.ANDNMH = function(args) {console.log('ANDNMH: Not Implemented');iptr += 4};
-Opcodes.prototype.ANDNML = function(args) {console.log('ANDNML: Not Implemented');iptr += 4};
-Opcodes.prototype.BDIF = function(args) {console.log('BDIF: Not Implemented');iptr += 4};
+Opcodes.prototype.ANDNL = function(args) {warning('ANDNL: Not Implemented');iptr += 4};
+Opcodes.prototype.ANDNMH = function(args) {warning('ANDNMH: Not Implemented');iptr += 4};
+Opcodes.prototype.ANDNML = function(args) {warning('ANDNML: Not Implemented');iptr += 4};
+Opcodes.prototype.BDIF = function(args) {warning('BDIF: Not Implemented');iptr += 4};
 Opcodes.prototype.BDIFI = function(args) {
 	Opcodes.prototype.BDIF(args);
 };
@@ -478,7 +485,7 @@ Opcodes.prototype.CSP = function(args) {
 Opcodes.prototype.CSPI = function(args) {
 	Opcodes.prototype.CSP(args);
 };
-Opcodes.prototype.CSWAP = function(args) {console.log('CSWAP: Not Implemented');iptr += 4};
+Opcodes.prototype.CSWAP = function(args) {warning('CSWAP: Not Implemented');iptr += 4};
 Opcodes.prototype.CSWAPI = function(args) {
 	Opcodes.prototype.CSWAP(args);
 };
@@ -512,15 +519,12 @@ Opcodes.prototype.DIV = function(args) {
 	var zval = z.getInt64();
 	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
 	if (Math.abs(yval) > large || Math.abs(zval) > large) {
-		warn('Division with possible loss of precision:' + args);
+		warning('Division with possible loss of precision:' + args);
 	}
-	console.log(yval);
-	console.log(zval);
-	console.log(zval ? yval / zval : 0);
 	x.setInt64( zval ? yval / zval : 0 );
 	Registers[getReg(args[0])] = x;
 	SpecialReg.rR = zval ? yval % zval : yval;	
-	iptr += 4
+	iptr += 4;
 };
 Opcodes.prototype.DIVI = function(args) {
 	Opcodes.prototype.DIV(args);
@@ -538,13 +542,13 @@ Opcodes.prototype.DIVU = function(args) {
 	var zval = z.getUint64();
 	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
 	if (yval > large || zval > large) {
-		warn('Division with possible loss of precision:' + args);
+		warning('Division with possible loss of precision:' + args);
 	}
-	// missing rD stuff??	
+	// missing rD stuff
 	x.setInt64( zval ? yval / zval : 0 );
 	Registers[getReg(args[0])] = x;
 	SpecialReg.rR = zval ? yval % zval : yval;	
-	iptr += 4
+	iptr += 4;
 };
 Opcodes.prototype.DIVUI = function(args) {
 	Opcodes.prototype.DIVU(args);
@@ -562,8 +566,21 @@ Opcodes.prototype.FADD = function(args) {
 	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
-Opcodes.prototype.FCMP = function(args) {console.log('FCMP: Not Implemented');iptr += 4};
-Opcodes.prototype.FCMPE = function(args) {console.log('FCMPE: Not Implemented');iptr += 4};
+Opcodes.prototype.FCMP = function(args) {
+	// a > b ? 1 : -1, 0 if eq
+	// res = args[0]
+	// a = args[1]
+	// b = args[2]
+	debug('FCMP: ' + args);
+	var a = Registers[getReg(args[1])];
+	var b = getValue(args[2]);
+	var val = new ByteArray();
+	var result = (a.getFloat64() > b.getFloat64()) ? 1 : (a.getFloat64() == b.getFloat64() ? 0 : -1);
+	val.setInt64(result);
+	Registers[getReg(args[0])] = val;
+	iptr += 4;
+};
+Opcodes.prototype.FCMPE = function(args) {warning('FCMPE: Not Implemented');iptr += 4};
 Opcodes.prototype.FDIV = function(args) {
 	// a = b / c
 	// var rega = args[0];
@@ -577,11 +594,46 @@ Opcodes.prototype.FDIV = function(args) {
 	Registers[getReg(args[0])] = a;		
 	iptr += 4;		
 };
-Opcodes.prototype.FEQL = function(args) {console.log('FEQL: Not Implemented');iptr += 4};
-Opcodes.prototype.FEQLE = function(args) {console.log('FEQLE: Not Implemented');iptr += 4};
-Opcodes.prototype.FINT = function(args) {console.log('FINT: Not Implemented');iptr += 4};
-Opcodes.prototype.FIX = function(args) {console.log('FIX: Not Implemented');iptr += 4};
-Opcodes.prototype.FIXU = function(args) {console.log('FIXU: Not Implemented');iptr += 4};
+Opcodes.prototype.FEQL = function(args) {
+	// a = b ? 1 : 0
+	// res = args[0]
+	// a = args[1]
+	// b = args[2]
+	debug('FEQL: ' + args);
+	var a = Registers[getReg(args[1])];
+	var b = getValue(args[2]);
+	var val = new ByteArray();
+	var result = a.getFloat64() === b.getFloat64() ? 1 : 0;
+	val.setInt64(result);
+	Registers[getReg(args[0])] = val;
+	iptr += 4;
+};
+Opcodes.prototype.FEQLE = function(args) {warning('FEQLE: Not Implemented');iptr += 4};
+Opcodes.prototype.FINT = function(args) {warning('FINT: Not Implemented');iptr += 4};
+Opcodes.prototype.FIX = function(args) {
+	// a = (int) b
+	// var a = args[0];
+	// var b = args[1];
+	debug('FIX: ' + args);
+	warning('Floating point special modes not implemented')
+	var a = new ByteArray();
+	var b = getValue(args[1]);
+	a.setInt64(b.getFloat64());
+	Registers[getReg(args[0])] = a;	
+	iptr += 4;
+};
+Opcodes.prototype.FIXU = function(args) {
+	// a = (int) b
+	// var a = args[0];
+	// var b = args[1];
+	debug('FINT: ' + args);
+	warning('Floating point special modes not implemented')
+	var a = new ByteArray();
+	var b = getValue(args[1]);
+	a.setUint64(b.getFloat64());
+	Registers[getReg(args[0])] = a;	
+	iptr += 4;
+};
 Opcodes.prototype.FLOT = function(args) {
 	// a = (float) b
 	// var rega = args[0];
@@ -596,8 +648,8 @@ Opcodes.prototype.FLOT = function(args) {
 Opcodes.prototype.FLOTI = function(args) {
 	Opcodes.prototype.FLOT(args);
 };
-Opcodes.prototype.FLOTU = function(args) {console.log('FLOTU: Not Implemented');iptr += 4};
-Opcodes.prototype.FLOTUI = function(args) {console.log('FLOTUI: Not Implemented');iptr += 4};
+Opcodes.prototype.FLOTU = function(args) {warning('FLOTU: Not Implemented');iptr += 4};
+Opcodes.prototype.FLOTUI = function(args) {warning('FLOTUI: Not Implemented');iptr += 4};
 Opcodes.prototype.FMUL = function(args) {
 	// a = b * c
 	// var rega = args[0];
@@ -611,7 +663,7 @@ Opcodes.prototype.FMUL = function(args) {
 	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
-Opcodes.prototype.FREM = function(args) {console.log('FREM: Not Implemented');iptr += 4};
+Opcodes.prototype.FREM = function(args) {warning('FREM: Not Implemented');iptr += 4};
 Opcodes.prototype.FSQRT = function(args) {
 	// a = sqrt(b)
 	// var rega = args[0];
@@ -636,11 +688,11 @@ Opcodes.prototype.FSUB = function(args) {
 	Registers[getReg(args[0])] = a;		
 	iptr += 4;
 };
-Opcodes.prototype.FUN = function(args) {console.log('FUN: Not Implemented');iptr += 4};
-Opcodes.prototype.FUNE = function(args) {console.log('FUNE: Not Implemented');iptr += 4};
-Opcodes.prototype.GET = function(args) {console.log('GET: Not Implemented');iptr += 4};
-Opcodes.prototype.GETA = function(args) {console.log('GETA: Not Implemented');iptr += 4};
-Opcodes.prototype.GETAB = function(args) {console.log('GETAB: Not Implemented');iptr += 4};
+Opcodes.prototype.FUN = function(args) {warning('FUN: Not Implemented');iptr += 4};
+Opcodes.prototype.FUNE = function(args) {warning('FUNE: Not Implemented');iptr += 4};
+Opcodes.prototype.GET = function(args) {warning('GET: Not Implemented');iptr += 4};
+Opcodes.prototype.GETA = function(args) {warning('GETA: Not Implemented');iptr += 4};
+Opcodes.prototype.GETAB = function(args) {warning('GETAB: Not Implemented');iptr += 4};
 Opcodes.prototype.GO = function(args) {
 	// oldaddr = args[0] = iptr + 4
 	debug('GO: ' + args);
@@ -649,24 +701,22 @@ Opcodes.prototype.GO = function(args) {
 		oldaddr = new ByteArray();
 	oldaddr.setUint64(iptr + 4);
 	Registers[getReg(args[0])] = oldaddr;
-	console.log(addr.getUint64() + offset.getUint64());
-	console.log(Labels['End']);
 	iptr = addr.getUint64() + offset.getUint64();
 };
 Opcodes.prototype.GOI = function(args) {
 	Opcodes.prototype.GO(args);
 };
-Opcodes.prototype.INCH = function(args) {console.log('INCH: Not Implemented');iptr += 4};
-Opcodes.prototype.INCL = function(args) {console.log('INCL: Not Implemented');iptr += 4};
-Opcodes.prototype.INCMH = function(args) {console.log('INCMH: Not Implemented');iptr += 4};
-Opcodes.prototype.INCML = function(args) {console.log('INCML: Not Implemented');iptr += 4};
+Opcodes.prototype.INCH = function(args) {warning('INCH: Not Implemented');iptr += 4};
+Opcodes.prototype.INCL = function(args) {warning('INCL: Not Implemented');iptr += 4};
+Opcodes.prototype.INCMH = function(args) {warning('INCMH: Not Implemented');iptr += 4};
+Opcodes.prototype.INCML = function(args) {warning('INCML: Not Implemented');iptr += 4};
 Opcodes.prototype.JMP = function(args) {
 	// relative address = args[0]
 	debug('JMP: ' + args);
 	var reladdr = getValue(args[0]);
 	iptr += 4*reladdr.getInt64();
 };
-Opcodes.prototype.JMPB = function(args) {console.log('JMPB: Not Implemented');iptr += 4};
+Opcodes.prototype.JMPB = function(args) {warning('JMPB: Not Implemented');iptr += 4};
 Opcodes.prototype.LDB = function(args) {
 	// val = args[0]
 	// addr = args[1] + args[2]
@@ -681,7 +731,7 @@ Opcodes.prototype.LDB = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDBU:' + args);
+		warning('Loading Memory from unset location with LDBU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xff;
@@ -713,7 +763,7 @@ Opcodes.prototype.LDBU = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDBU:' + args);
+		warning('Loading Memory from unset location with LDBU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xff;
@@ -738,7 +788,7 @@ Opcodes.prototype.LDHT = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDHT:' + args);
+		warning('Loading Memory from unset location with LDHT:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
@@ -761,7 +811,7 @@ Opcodes.prototype.LDO = function(args) {
 	memaddr -= memaddr % 8;
 	var memval = Memory[memaddr];
 	if (!memval) {
-		warn('Loading Memory from unset location with LDO:' + args);
+		warning('Loading Memory from unset location with LDO:' + args);
 		memval = new ByteArray();
 		memval.setUint64(0);		
 	}
@@ -775,14 +825,14 @@ Opcodes.prototype.LDOI = function(args) {
 Opcodes.prototype.LDOU = function(args) {
 	Opcodes.prototype.LDO(args);
 };
-Opcodes.prototype.LDUNC = function(args) {console.log('LDUNC: Not Implemented');iptr += 4};
+Opcodes.prototype.LDUNC = function(args) {warning('LDUNC: Not Implemented');iptr += 4};
 Opcodes.prototype.LDUNCI = function(args) {
 	Opcodes.prototype.LDUNC(args);
 };
 Opcodes.prototype.LDOUI = function(args) {
 	Opcodes.prototype.LDOU(args);
 };
-Opcodes.prototype.LDSF = function(args) {console.log('LDSF: Not Implemented');iptr += 4};
+Opcodes.prototype.LDSF = function(args) {warning('LDSF: Not Implemented');iptr += 4};
 Opcodes.prototype.LDSFI = function(args) {
 	Opcodes.prototype.LDSF(args);
 };
@@ -798,7 +848,7 @@ Opcodes.prototype.LDT = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDT:' + args);
+		warning('Loading Memory from unset location with LDT:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
@@ -823,7 +873,7 @@ Opcodes.prototype.LDTU = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDTU:' + args);
+		warning('Loading Memory from unset location with LDTU:' + args);
 		// we are loading nothing so just set to zero
 		val.setUint64(0);
 	} else {
@@ -836,7 +886,7 @@ Opcodes.prototype.LDTU = function(args) {
 Opcodes.prototype.LDTUI = function(args) {
 	Opcodes.prototype.LDTU(args);
 };
-Opcodes.prototype.LDVTS = function(args) {console.log('LDVTS: Not Implemented');iptr += 4};
+Opcodes.prototype.LDVTS = function(args) {warning('LDVTS: Not Implemented');iptr += 4};
 Opcodes.prototype.LDVTSI = function(args) {
 	Opcodes.prototype.LDVTS(args);
 };
@@ -854,7 +904,7 @@ Opcodes.prototype.LDW = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDWU:' + args);
+		warning('Loading Memory from unset location with LDWU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xffff;
@@ -886,7 +936,7 @@ Opcodes.prototype.LDWU = function(args) {
 	var memval = Memory[memaddr];
 	var val = new ByteArray();	
 	if (!memval) {
-		warn('Loading Memory from unset location with LDWU:' + args);
+		warning('Loading Memory from unset location with LDWU:' + args);
 		val.setUint64(0);
 	} else {
 		mask = 0xffff;
@@ -899,7 +949,7 @@ Opcodes.prototype.LDWU = function(args) {
 Opcodes.prototype.LDWUI = function(args) {
 	Opcodes.prototype.LDWU(args);
 };
-Opcodes.prototype.MOR = function(args) {console.log('MOR: Not Implemented');iptr += 4};
+Opcodes.prototype.MOR = function(args) {warning('MOR: Not Implemented');iptr += 4};
 Opcodes.prototype.MORI = function(args) {
 	Opcodes.prototype.MOR(args);
 };
@@ -916,11 +966,11 @@ Opcodes.prototype.MUL = function(args) {
 	var zval = z.getInt64();
 	var large = Math.pow(2, 52); // largest js num that doesn't lose precision
 	if (Math.abs(yval * zval) > large) {
-		warn('Multiplication with possible loss of precision:' + args);
+		warning('Multiplication with possible loss of precision:' + args);
 	}
 	x.setInt64(yval * zval);
 	Registers[getReg(args[0])] = x;
-	iptr += 4
+	iptr += 4;
 };
 Opcodes.prototype.MULI = function(args) {
 	Opcodes.prototype.MUL(args);
@@ -937,21 +987,22 @@ Opcodes.prototype.MULU = function(args) {
 	var lowbits = y.uint64[0] * z.uint64[0];
 	x.uint64[0] = lowbits % 4294967296;
 	x.uint64[1] = lowbits / 4294967296;
-	var highbits = y.uint64[0] * z.uint64[1] + y.uint64[1] * z.uint64[0];
-	// multiplying both the high bits together results in
-	//  overflow so just dont do it
-	x.uint64[1] += highbits;
+	var highbits = y.uint64[0] * z.uint64[1] + y.uint64[1] * z.uint64[0] + x.uint64[1];
+	var overflowbits = new ByteArray();
+	overflowbits.setUint64( highbits / 4294967296 + y.uint64[1] * z.uint64[1] );
+	x.uint64[1] = highbits % 4294967296;
 	Registers[getReg(args[0])] = x;
+	SpecialReg.rH = overflowbits;
 	iptr += 4;
 };
 Opcodes.prototype.MULUI = function(args) {
 	Opcodes.prototype.MULU(args);
 };
-Opcodes.prototype.MUX = function(args) {console.log('MUX: Not Implemented');iptr += 4};
+Opcodes.prototype.MUX = function(args) {warning('MUX: Not Implemented');iptr += 4};
 Opcodes.prototype.MUXI = function(args) {
 	Opcodes.prototype.MUX(args);
 };
-Opcodes.prototype.MXOR = function(args) {console.log('MXOR: Not Implemented');iptr += 4};
+Opcodes.prototype.MXOR = function(args) {warning('MXOR: Not Implemented');iptr += 4};
 Opcodes.prototype.MXORI = function(args) {
 	Opcodes.prototype.MXOR(args);
 };
@@ -1052,7 +1103,7 @@ Opcodes.prototype.NXOR = function(args) {
 Opcodes.prototype.NXORI = function(args) {
 	Opcodes.prototype.NXOR(args);
 };
-Opcodes.prototype.ODIF = function(args) {console.log('ODIF: Not Implemented');iptr += 4};
+Opcodes.prototype.ODIF = function(args) {warning('ODIF: Not Implemented');iptr += 4};
 Opcodes.prototype.ODIFI = function(args) {
 	Opcodes.prototype.ODIF(args);
 };
@@ -1070,13 +1121,13 @@ Opcodes.prototype.OR = function(args) {
 	Registers[getReg(args[0])] = a;
 	iptr += 4;
 };
-Opcodes.prototype.ORH = function(args) {console.log('ORH: Not Implemented');iptr += 4};
+Opcodes.prototype.ORH = function(args) {warning('ORH: Not Implemented');iptr += 4};
 Opcodes.prototype.ORI = function(args) {
 	Opcodes.prototype.OR(args);
 };
-Opcodes.prototype.ORL = function(args) {console.log('ORL: Not Implemented');iptr += 4};
-Opcodes.prototype.ORMH = function(args) {console.log('ORMH: Not Implemented');iptr += 4};
-Opcodes.prototype.ORML = function(args) {console.log('ORML: Not Implemented');iptr += 4};
+Opcodes.prototype.ORL = function(args) {warning('ORL: Not Implemented');iptr += 4};
+Opcodes.prototype.ORMH = function(args) {warning('ORMH: Not Implemented');iptr += 4};
+Opcodes.prototype.ORML = function(args) {warning('ORML: Not Implemented');iptr += 4};
 Opcodes.prototype.ORN = function(args) {
 	// rega = regb | ~regc
 	// var rega = args[0];
@@ -1125,7 +1176,7 @@ Opcodes.prototype.PBNZB = function(args) {
 	Opcodes.prototype.PBNZ(args);
 };
 Opcodes.prototype.PBOD = function(args) {
-	Opcodes.prototype.PBOD(args);
+	Opcodes.prototype.BOD(args);
 };
 Opcodes.prototype.PBODB = function(args) {
 	Opcodes.prototype.PBOD(args);
@@ -1142,62 +1193,128 @@ Opcodes.prototype.PBZ = function(args) {
 Opcodes.prototype.PBZB = function(args) {
 	Opcodes.prototype.PBZ(args);
 };
-Opcodes.prototype.POP = function(args) {console.log('POP: Not Implemented');iptr += 4};
-Opcodes.prototype.PREGO = function(args) {console.log('PREGO: Not Implemented');iptr += 4};
+Opcodes.prototype.POP = function(args) {warning('POP: Not Implemented');iptr += 4};
+Opcodes.prototype.PREGO = function(args) {warning('PREGO: Not Implemented');iptr += 4};
 Opcodes.prototype.PREGOI = function(args) {
 	Opcodes.prototype.PREGO(args);
 };
-Opcodes.prototype.PRELD = function(args) {console.log('PRELD: Not Implemented');iptr += 4};
+Opcodes.prototype.PRELD = function(args) {warning('PRELD: Not Implemented');iptr += 4};
 Opcodes.prototype.PRELDI = function(args) {
 	Opcodes.prototype.PRELD(args);
 };
-Opcodes.prototype.PREST = function(args) {console.log('PREST: Not Implemented');iptr += 4};
+Opcodes.prototype.PREST = function(args) {warning('PREST: Not Implemented');iptr += 4};
 Opcodes.prototype.PRESTI = function(args) {
 	Opcodes.prototype.PREST(args);
 };
-Opcodes.prototype.PUSHGO = function(args) {console.log('PUSHGO: Not Implemented');iptr += 4};
+Opcodes.prototype.PUSHGO = function(args) {warning('PUSHGO: Not Implemented');iptr += 4};
 Opcodes.prototype.PUSHGOI = function(args) {
 	Opcodes.prototype.PUSHGO(args);
 };
-Opcodes.prototype.PUSHJ = function(args) {console.log('PUSHJ: Not Implemented');iptr += 4};
-Opcodes.prototype.PUSHJB = function(args) {console.log('PUSHJB: Not Implemented');iptr += 4};
-Opcodes.prototype.PUT = function(args) {console.log('PUT: Not Implemented');iptr += 4};
+Opcodes.prototype.PUSHJ = function(args) {warning('PUSHJ: Not Implemented');iptr += 4};
+Opcodes.prototype.PUSHJB = function(args) {warning('PUSHJB: Not Implemented');iptr += 4};
+Opcodes.prototype.PUT = function(args) {warning('PUT: Not Implemented');iptr += 4};
 Opcodes.prototype.PUTI = function(args) {
 	Opcodes.prototype.PUT(args);
 };
-Opcodes.prototype.RESUME = function(args) {console.log('RESUME: Not Implemented');iptr += 4};
-Opcodes.prototype.SADD = function(args) {console.log('SADD: Not Implemented');iptr += 4};
+Opcodes.prototype.RESUME = function(args) {warning('RESUME: Not Implemented');iptr += 4};
+Opcodes.prototype.SADD = function(args) {warning('SADD: Not Implemented');iptr += 4};
 Opcodes.prototype.SADDI = function(args) {
 	Opcodes.prototype.SADD(args);
 };
-Opcodes.prototype.SAVE = function(args) {console.log('SAVE: Not Implemented');iptr += 4};
-Opcodes.prototype.SETH = function(args) {console.log('SETH: Not Implemented');iptr += 4};
-Opcodes.prototype.SETL = function(args) {console.log('SETL: Not Implemented');iptr += 4};
-Opcodes.prototype.SETMH = function(args) {console.log('SETMH: Not Implemented');iptr += 4};
-Opcodes.prototype.SETML = function(args) {console.log('SETML: Not Implemented');iptr += 4};
-Opcodes.prototype.SFLOT = function(args) {console.log('SFLOT: Not Implemented');iptr += 4};
+Opcodes.prototype.SAVE = function(args) {warning('SAVE: Not Implemented');iptr += 4};
+Opcodes.prototype.SETH = function(args) {warning('SETH: Not Implemented');iptr += 4};
+Opcodes.prototype.SETL = function(args) {warning('SETL: Not Implemented');iptr += 4};
+Opcodes.prototype.SETMH = function(args) {warning('SETMH: Not Implemented');iptr += 4};
+Opcodes.prototype.SETML = function(args) {warning('SETML: Not Implemented');iptr += 4};
+Opcodes.prototype.SFLOT = function(args) {warning('SFLOT: Not Implemented');iptr += 4};
 Opcodes.prototype.SFLOTI = function(args) {
 	Opcodes.prototype.SFLOT(args);
 };
-Opcodes.prototype.SFLOTU = function(args) {console.log('SFLOTU: Not Implemented');iptr += 4};
+Opcodes.prototype.SFLOTU = function(args) {warning('SFLOTU: Not Implemented');iptr += 4};
 Opcodes.prototype.SFLOTUI = function(args) {
 	Opcodes.prototype.SFLOTU(args);
 };
-Opcodes.prototype.SL = function(args) {console.log('SL: Not Implemented');iptr += 4};
+Opcodes.prototype.SL = function(args) {
+	// a = b << c
+	// a = args[0]
+	// b = args[1]
+	// c = args[2]
+	debug('SL: ' + args);
+	var b = Registers[getReg(args[1])];
+	var c = getValue(args[2]);
+	var shiftamount = c.getUint64();
+	var a = new ByteArray();
+	if (shiftamount < 32) {
+		var mask = 0xffffffff << (32 - shiftamount);
+		var overflowbits = (b.uint64[1] & mask) >>> (32 - shiftamount);
+		a.uint64[1] = (b.uint64[1] << shiftamount) | overflowbits;
+		a.uint64[0] = b.uint64[0] << shiftamount;
+	} else {
+		var overflowbits = b.uint64[1] << (shiftamount % 32);
+		a.uint64[0] = 0;
+		a.uint64[1] = overflowbits;
+	}
+	Registers[getReg(args[0])] = a;
+	iptr += 4;
+};
 Opcodes.prototype.SLI = function(args) {
 	Opcodes.prototype.SL(args);
 };
-Opcodes.prototype.SLU = function(args) {console.log('SLU: Not Implemented');iptr += 4};
+Opcodes.prototype.SLU = function(args) {
+	// a = b << c
+	// a = args[0]
+	// b = args[1]
+	// c = args[2]
+	debug('SLU: ' + args);
+	var b = Registers[getReg(args[1])];
+	var c = getValue(args[2]);
+	var shiftamount = c.getUint64();
+	var a = new ByteArray();
+	if (shiftamount < 32) {
+		var mask = 0xffffffff << (32 - shiftamount);
+		var overflowbits = (b.uint64[1] & mask) >>> (32 - shiftamount);
+		a.uint64[1] = (b.uint64[1] << shiftamount) | overflowbits;
+		a.uint64[0] = b.uint64[0] << shiftamount;
+	} else {
+		var overflowbits = b.uint64[1] << (shiftamount % 32);
+		a.uint64[0] = 0;
+		a.uint64[1] = overflowbits;
+	}
+	Registers[getReg(args[0])] = a;
+	iptr += 4;
+};
 Opcodes.prototype.SLUI = function(args) {
 	Opcodes.prototype.SLU(args);
 };
-Opcodes.prototype.SR = function(args) {console.log('SR: Not Implemented');iptr += 4};
+Opcodes.prototype.SR = function(args) {
+	// a = b >> c
+	// a = args[0]
+	// b = args[1]
+	// c = args[2]
+	debug('SR: ' + args);
+	var b = Registers[getReg(args[1])];
+	var c = getValue(args[2]);
+	var shiftamount = c.getUint64();
+	var a = new ByteArray();
+	if (shiftamount < 32) {
+		var mask = ~(0xffffffff << shiftamount);
+		var overflowbits = (b.uint64[1] & mask) << (32 - shiftamount);
+		a.uint64[1] = b.uint64[1] >> shiftamount;
+		a.uint64[0] = (b.uint64[0] >>> shiftamount) | overflowbits;
+	} else {
+		var mask = 0xffffffff << (shiftamount % 32);
+		var overflowbits = (b.uint64[1] & mask) >> (shiftamount % 32);
+		a.uint64[1] = b.int64[1] < 0 ? 0xffffffff : 0;
+		a.uint64[0] = overflowbits;
+	}
+	Registers[getReg(args[0])] = a;
+	iptr += 4;
+};
 Opcodes.prototype.SRI = function(args) {
 	Opcodes.prototype.SR(args);
 };
 Opcodes.prototype.SRU = function(args) {
-	console.log('>>>>>>>>>>> SRU DOESNT WORK on shifts >= 32 bits ... yet!');
-	// a = b >> c
+	// a = b >>> c
 	// a = args[0]
 	// b = args[1]
 	// c = args[2]
@@ -1207,11 +1324,15 @@ Opcodes.prototype.SRU = function(args) {
 	var shiftamount = c.getUint64();
 	var a = new ByteArray();
 	if (shiftamount < 32) {
-		var mask = ~(0xffffffff << (shiftamount % 32));
+		var mask = ~(0xffffffff << shiftamount);
 		var overflowbits = (b.uint64[1] & mask) << (32 - shiftamount);
 		a.uint64[1] = b.uint64[1] >>> shiftamount;
-		console.log(a.uint64[1]);
 		a.uint64[0] = (b.uint64[0] >>> shiftamount) | overflowbits;
+	} else {
+		var mask = 0xffffffff << (shiftamount % 32);
+		var overflowbits = (b.uint64[1] & mask) >>> (shiftamount % 32);
+		a.uint64[1] = 0;
+		a.uint64[0] = overflowbits;
 	}
 	Registers[getReg(args[0])] = a;
 	iptr += 4;
@@ -1306,14 +1427,14 @@ Opcodes.prototype.STOI = function(args) {
 Opcodes.prototype.STOU = function(args) {
 	Opcodes.prototype.STO(args);
 };
-Opcodes.prototype.STUNC = function(args) {console.log('STUNC: Not Implemented');iptr += 4};
+Opcodes.prototype.STUNC = function(args) {warning('STUNC: Not Implemented');iptr += 4};
 Opcodes.prototype.STUNCI = function(args) {
 	Opcodes.prototype.STUNC(args);
 };
 Opcodes.prototype.STOUI = function(args) {
 	Opcodes.prototype.STOU(args);
 };
-Opcodes.prototype.STSF = function(args) {console.log('STSF: Not Implemented');iptr += 4};
+Opcodes.prototype.STSF = function(args) {warning('STSF: Not Implemented');iptr += 4};
 Opcodes.prototype.STSFI = function(args) {
 	Opcodes.prototype.STSF(args);
 };
@@ -1418,27 +1539,27 @@ Opcodes.prototype.SUBU = function(args) {
 Opcodes.prototype.SUBUI = function(args) {
 	Opcodes.prototype.SUBU(args);
 };
-Opcodes.prototype.SWYM = function(args) {console.log('SWYM: Not Implemented');iptr += 4};
-Opcodes.prototype.SYNC = function(args) {console.log('SYNC: Not Implemented');iptr += 4};
-Opcodes.prototype.SYNCD = function(args) {console.log('SYNCD: Not Implemented');iptr += 4};
+Opcodes.prototype.SWYM = function(args) {warning('SWYM: Not Implemented');iptr += 4};
+Opcodes.prototype.SYNC = function(args) {warning('SYNC: Not Implemented');iptr += 4};
+Opcodes.prototype.SYNCD = function(args) {warning('SYNCD: Not Implemented');iptr += 4};
 Opcodes.prototype.SYNCDI = function(args) {
 	Opcodes.prototype.SYNCD(args);
 };
-Opcodes.prototype.SYNCID = function(args) {console.log('SYNCID: Not Implemented');iptr += 4};
+Opcodes.prototype.SYNCID = function(args) {warning('SYNCID: Not Implemented');iptr += 4};
 Opcodes.prototype.SYNCIDI = function(args) {
 	Opcodes.prototype.SYNCID(args);
 };
-Opcodes.prototype.TDIF = function(args) {console.log('TDIF: Not Implemented');iptr += 4};
+Opcodes.prototype.TDIF = function(args) {warning('TDIF: Not Implemented');iptr += 4};
 Opcodes.prototype.TDIFI = function(args) {
 	Opcodes.prototype.TDIF(args);
 };
-Opcodes.prototype.TRIP = function(args) {console.log('TRIP: Not Implemented');iptr += 4};
+Opcodes.prototype.TRIP = function(args) {warning('TRIP: Not Implemented');iptr += 4};
 Opcodes.prototype.TRAP = function(args) {
 	debug('TRAP: ' + args);
 	TrapOps[args[1]]();
 };
-Opcodes.prototype.UNSAVE = function(args) {console.log('UNSAVE: Not Implemented');iptr += 4};
-Opcodes.prototype.WDIF = function(args) {console.log('WDIF: Not Implemented');iptr += 4};
+Opcodes.prototype.UNSAVE = function(args) {warning('UNSAVE: Not Implemented');iptr += 4};
+Opcodes.prototype.WDIF = function(args) {warning('WDIF: Not Implemented');iptr += 4};
 Opcodes.prototype.WDIFI = function(args) {
 	Opcodes.prototype.WDIF(args);
 };
@@ -1634,7 +1755,7 @@ var nop = function(x){
 };
 
 
-function run() {
+function run(maxops) {
 	var Ops = new Opcodes();
 	console.log('Started execution at addr: ' + iptr);
 	var numops = 0;
@@ -1649,9 +1770,12 @@ function run() {
 		// perform the operation, passing in the args
 		op(args);
 		numops++;
+		if (maxops && maxops <= numops) {
+			break;
+		}
 	}
-
 	console.log('Finished execution after ' + numops + ' operations');
+	return numops;
 }
 
 
@@ -1695,8 +1819,7 @@ function loadIntoMem(src) {
 }
 
 
-function readSrcFile(fname) {
-	var data = fs.readFileSync(fname, 'utf8');
+function parseRawText(data) {
 	data = data.split('\n');
 	for (var i = 0; i < data.length; i++) {
 		data[i] = data[i].split('\t');
@@ -1704,13 +1827,21 @@ function readSrcFile(fname) {
 	return data;
 }
 
+// this should not be called outside of node
+function readSrcFile(fname) {
+	return parseRawText(fs.readFileSync(fname, 'utf8'));
+}
 
-var fname = process.argv[2];
-var src = readSrcFile(fname);
-loadIntoMem(src);
-console.log(RegLabels);
-iptr = Labels['Main'];
-// console.log(Registers);
-run();
-console.log(Registers);
+if (NodeEnv) {
+	var fname = process.argv[2];
+	var src = readSrcFile(fname);
+	gregptr = 255
+	loadIntoMem(src);
+	console.log(RegLabels);
+	iptr = Labels['Main'];
+	// console.log(Registers);
+	run();
+	console.log(Registers);
+}
+
 	
