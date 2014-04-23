@@ -6,42 +6,65 @@ function generateExampleCode() {
 }
 
 function showSuccess(numops) {
-  var html = ['<div class="alert alert-success alert-dismissable">',
+  var html = ['<div class="alert alert-success alert-dismissable fade in">',
               '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>',
-              '<strong>Success!</strong> Ran', numops ,'mmix operations.</div>'].join(' ');
-  $('#alertarea').append(html);
+              '<strong>Success!</strong> Ran', numops ,'mmix operation(s).</div>'].join(' ');
+  $('#alertarea').prepend(html);
 }
 
-function showFailure(err) {
-  var html = ['<div class="alert alert-danger alert-dismissable">',
+function showFailure(err, lineno) {
+  var html = ['<div class="alert alert-danger alert-dismissable fade in">',
               '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>',
-              '<strong>Failure!</strong> ', err ,'</div>'].join('');
-  $('#alertarea').append(html);
+              '<strong>Failure!</strong> Line:', lineno, ':', err ,'</div>'].join(' ');
+  $('#alertarea').prepend(html);
 }
 
 function showWarning(msg) {
-  var html = ['<div class="alert alert-warning alert-dismissable">',
+  var html = ['<div class="alert alert-warning alert-dismissable fade in">',
               '<button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>',
               '<strong>Warning!</strong> ', msg ,' </div>'].join('');
-  $('#alertarea').append(html);
+  $('#alertarea').prepend(html);
 }
+
+function updateSelectedLine(lineno) {
+  $('.lineselect').removeClass('lineselect');
+  $('.lineno').each(function (index) {
+    var t = $(this);
+    if (t.text() == lineno) {
+      t.addClass('lineselect');
+      return false;
+    }
+  });
+}
+
+function findMainLineNo() {
+  var textlines = $('.lined').val().split('\n');
+  for (var i = 0; i < textlines.length; i++) {
+    if ('Main' == textlines[i].split('\t')[0]) {
+      return i + 1;
+    }
+  }
+  showWarning('No Main Label! Execution starts at the lable: Main');
+  return -1;
+}
+
 
 function displayRegisters() {
   var html;
   for (reg in Registers) {
     html += ['<tr><td>', reg, '</td><td>', Registers[reg].inspect(), '</td></tr>'].join('');
   }
-  var table = $('#regtable tbody')
+  var table = $('#regtable tbody');
   table.children('tr').remove();
   table.append(html);
 }
 
 function displayMemory() {
   var html;
-  for (reg in Registers) {
-    html += ['<tr><td>', reg, '</td><td>', Registers[reg].inspect(), '</td></tr>'].join('');
+  for (cell in Memory) {
+    html += ['<tr><td>', cell, '</td><td>', Memory[cell].inspect(), '</td></tr>'].join('');
   }
-  var table = $('#regtable tbody')
+  var table = $('#memtable tbody');
   table.children('tr').remove();
   table.append(html);
 }
@@ -53,7 +76,6 @@ $(function() {
   $('#fileinput').change(function () {
     var f = this.files[0];
     var reader = new FileReader();
-
     reader.onload = function() {
       $('#codearea').val(reader.result);
     }
@@ -64,7 +86,8 @@ $(function() {
   $('#runbtn').click(function() {
     var data = $('#codearea').val();
     var src = parseRawText(data);
-    gregptr = 255
+    // gregptr = 255;
+    initInterpreter()
     loadIntoMem(src);
     iptr = Labels['Main'];
     try {
@@ -72,8 +95,10 @@ $(function() {
       displayRegisters();
       displayMemory();
       showSuccess(numops);
+      iptr = 'undefined';
+      updateSelectedLine(findMainLineNo());      
     } catch(err) {
-      showFailure(err);
+      showFailure(err, iptr/4);
       throw err;
     }
   });
@@ -83,7 +108,8 @@ $(function() {
     if (iptr === 'undefined') {
       var data = $('#codearea').val();
       var src = parseRawText(data);
-      gregptr = 255
+      // gregptr = 255;
+      initInterpreter()
       loadIntoMem(src);
       iptr = Labels['Main'];
     }
@@ -91,14 +117,19 @@ $(function() {
       var numops = run(1);
       displayRegisters();
       displayMemory();
+      updateSelectedLine(iptr/4 + 1); // +1 as the array starts from 0
       showSuccess(numops);
    } catch(err) {
-     showFailure(err);
+     showFailure(err, iptr/4);
      throw err;
    }
   });
 
-  // step through the code one line at a time
+  $('#rstbtn').click(function() {
+    iptr = 'undefined';
+    updateSelectedLine(findMainLineNo());
+  });
+
   $('#regbtn').click(function() {
     displayRegisters();
   });
@@ -109,11 +140,11 @@ $(function() {
       key.preventDefault();
       var s = this.selectionStart;
       this.value = [this.value.substring(0, this.selectionStart), '\t', this.value.substring(this.selectionEnd)].join('');
-      this.selectionEnd = s+1; 
+      this.selectionEnd = s + 1; 
     }
   });
 
   // give the code area line numbers
   $('.lined').val(generateExampleCode());
-  $('.lined').linedtextarea();
+  $('.lined').linedtextarea({selectedLine: findMainLineNo()});
 });

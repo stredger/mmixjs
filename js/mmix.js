@@ -24,6 +24,22 @@ var iptr = 'undefined'; // instruction pointer
 var stkptr; // current pointer into available Stack
 var gregptr = 255; // points to the last allocated global reg ($255 is alwyas global)
 
+// quick hack for re initializing mmix interpreter without acutally moving 
+//  the values into the object (which should be done!!)
+function initInterpreter() {
+	Registers = {};
+	RegLabels = {};
+	SpecialReg = {};
+	Memory = [];
+	Code = [];
+	RegStack = [];
+	Labels = {};
+	Constants = {};
+	iptr = 'undefined';
+	gregptr = 255;	
+}
+
+
 var dbgopts = true;
 function debug(str) {
 	if (dbgopts) {
@@ -1751,6 +1767,7 @@ Opcodes.prototype.ZSZI = function(args) {
 
 var nop = function(x){
 	debug('NOP: ' + x);
+	warning('NOP: ' + x);
 	iptr += 4;
 };
 
@@ -1764,11 +1781,16 @@ function run(maxops) {
 		// get the current instruction from our Code at 'iptr'
 		var icurr = Code[iptr];
 		// find the operation in 'ops' if we can't find it, we turn into a nop
-		var op = Ops[icurr[0]] || nop;
+		var op = Ops[icurr[0]];
 		// get the arguments for the operation, if none set to null
-		var args = icurr[1] ? icurr[1].split(',') : null;
+		var args = icurr[1] ? icurr[1].split(',') : [];
 		// perform the operation, passing in the args
+		if (!op) {
+			op = nop;
+			args.unshift(icurr[0]);
+		}
 		op(args);
+
 		numops++;
 		if (maxops && maxops <= numops) {
 			break;

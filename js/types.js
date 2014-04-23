@@ -112,12 +112,8 @@ ByteArray.prototype.toString = function() {
 	return ByteArray.prototype.inspect();
 }
 
-exports.ByteArray = ByteArray;
-
-
-var a = new ByteArray();
-a.setInt64(-1284967191);
-console.log(a);
-console.log(a.getInt64());
-
-// 0xffffffff00000001
+// check for if running in node. If we really want to be
+//  safe though this should be a more robust check
+if (typeof window === 'undefined') {
+	exports.ByteArray = ByteArray;
+}
