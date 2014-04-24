@@ -70,6 +70,13 @@ function displayMemory() {
 }
 
 
+function loadExampleCode(fname) {
+  $.get('../mms/' + fname, function(data) {
+    $('#codearea').val(data);
+  });
+}
+
+
 $(function() {
 
   // read a text file and place it in the code area
@@ -108,7 +115,6 @@ $(function() {
     if (iptr === 'undefined') {
       var data = $('#codearea').val();
       var src = parseRawText(data);
-      // gregptr = 255;
       initInterpreter()
       loadIntoMem(src);
       iptr = Labels['Main'];
@@ -128,6 +134,9 @@ $(function() {
   $('#rstbtn').click(function() {
     iptr = 'undefined';
     updateSelectedLine(findMainLineNo());
+    initInterpreter();
+    displayRegisters();
+    displayMemory();
   });
 
   $('#regbtn').click(function() {
@@ -142,6 +151,12 @@ $(function() {
       this.value = [this.value.substring(0, this.selectionStart), '\t', this.value.substring(this.selectionEnd)].join('');
       this.selectionEnd = s + 1; 
     }
+  });
+
+
+  $("#exampledd a").click(function(e){
+    loadExampleCode(this.text);
+    e.preventDefault();
   });
 
   // give the code area line numbers

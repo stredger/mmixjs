@@ -712,12 +712,19 @@ Opcodes.prototype.GETAB = function(args) {warning('GETAB: Not Implemented');iptr
 Opcodes.prototype.GO = function(args) {
 	// oldaddr = args[0] = iptr + 4
 	debug('GO: ' + args);
-	var addr = Registers[getReg(args[1])],
-		offset = getValue(args[2]),
-		oldaddr = new ByteArray();
-	oldaddr.setUint64(iptr + 4);
+	var addr = Registers[getReg(args[1])];
+	var offset = getValue(args[2]);
+	if (!Labels[args[2]]) {
+		// we index our code array as multiples of 4
+		//  and start from 0 (so -1 as the first line isn't line 0)
+		var offval = offset.getUint64();
+		offset.setUint64( offval ? (offval - 1)*4 : 0 );
+	}
+	var	oldaddr = new ByteArray();
+	oldaddr.setUint64((iptr + 4) / 4);
+
 	Registers[getReg(args[0])] = oldaddr;
-	iptr = addr.getUint64() + offset.getUint64();
+	iptr = addr.getUint64()*4 + offset.getUint64();
 };
 Opcodes.prototype.GOI = function(args) {
 	Opcodes.prototype.GO(args);

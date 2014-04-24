@@ -1,0 +1,222 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{hyperref}
+\usepackage{listings}
+
+\begin{document}
+
+\title{MMIX.js the JavaScript MMIX Interpreter}
+\date{2014-4-23}
+
+
+\author{\IEEEauthorblockN{Stephen Tredger}
+\IEEEauthorblockA{University of Victoria\\
+Victoria, British Columbia}}
+
+\maketitle
+
+\section{Introduction}
+
+Mmix.js is an interpreter for the MMIX language. MMIX was developed by Donald Knuth in the early 90’s as a replacement for Knuth’s previous machine language MIX. Knuth describes MMIX in great detail in his book The Art of Computer Programming Volume 1 including all the instructions in Section 1.3.1 (which we will refer to as opcodes) and what happens internally when subroutines are called \cite{knuth1968art}. In his book Knuth also justifies the need for a low level language, but I will just simply say there will always be a need to be able to understand and implement algorithms at a low level. Regardless of the fact that it is fun to find hacks that directly manipulate individual bits, understanding how machine instructions operate is critical when implementing a performance sensitive algorithms. Which is exactly what the interpreter is aimed to do, aid in the understanding of MMIX and how machine instructions work together to perform computation.
+
+In Knuth’s The Art of Computer Programming the main use of MMIX is to demonstrate small examples not write large robust programs. It occurred to me this is exactly how I use the Python interpreter to figure out small segments of Python code. From this small revelation I thought it would be nice to have a small interpreter for MMIX programs that was portable and accessible, and so the JavaScript MMIX interpreter was born. I chose JavaScript as it allows the interpreter to run entirely in a users browser, and a simple gui can be constructed using basic web technologies. This allows the MMIX interpreter to be run on any system with a supporting browser. One major downside is that JavaScript uses 64 bit floating point numbers for all values so we only have 52 bits of precision, but MMIX uses 64 bits! Furthermore JavaScript does implement bit shift operations, but internally the number is converted to either a signed or unsigned 32 bit integer before the bitwise operation is performed. Fortunately we can overcome this limitation by representing an MMIX value as two 32 bit JavaScript values.
+
+The interpreter is not designed to implement the entire MMIX specification, but it should allow one to play around with MMIX and understand what is happening with each operation. Performance was not a primary consideration and the interpreter is most likely magnitudes of times slower than Knuth’s MMIX simulator. The project can be found at \url{https://github.com/stredger/mmixjs} and is where all bugs should be reported. A functional version of the interpreter can be found at \url{http://web.uvic.ca/~stredger/mmix/web} along with some example mmix programs. One word of caution, if an infinite loop or computationally intensive program is run in the interpreter the browser will likely become unresponsive for some time!
+
+
+\vspace{0.5cm}
+\section{Implementation Details}
+\label{sec:impl}
+
+The MMIX interpreter runs MMIXAL source code, which is the assembly language for the underlying MMIX machine language and is explained in Section 1.3.1 of Knuth's The Art of Computer Programming Volume 1. The most compact version can be found in the latest Fascicle of the book \cite{mmixfasc}. The interpreter does not fully implement all features of MMIXAL but a reasonable subset. The missing features are discussed later in Section \ref{sec:unimp}. A MMIXAL program consists of three columns; Label, Opcode, and expression. For the interpreter the columns must be tab separated, and the expression column must have its arguments comma separated. A program starts execution at the Main label and terminates when the $TRAP$ opcode is called with the arguments $0,Halt,0$. Sample MMIXAL code is shown in Figure I. Most opcodes in MMIX have a version for when the arguments are exclusively registers or when one of the arguments is an immediate constant. For example, the $ADD$ $\$a\$b,\$c$ opcode adds the values in registers $\$b$ and $\$c$ and stores the result in register $\$a$, while the $ADDI$ $\$a,\$b,c$ opcode takes the value in register $\$b$ and adds the constant amount $c$, then stores the result in register $\$a$. MMIXAL does not distinguish between the two versions and one can simply write $ADD$ $\$a,\$b,c$ which normally get translated to the corresponding $ADDI$ instruction. In the interpreter we too treat $ADD$ and $ADDI$ as the same instruction so there is no need to worry about using the correct opcode for the format of the arguments. One thing to note is that in MMIXAL there are some restrictions on the value of immediate constants as an instruction along with all its arguments must fit into 64 bits. However since we are dealing with text in the interpreter we have no such restrictions!
+
+To understand how the interpreter works internally we will look at the interpreter objects defined in JavaScript. When the interpreter first reads a source file it reads line by line putting all the source into a Code array. If a source line contains an $IS$ statement the interpreter sets up a reference to either a register or a constant. Register labels are handled in a special RegLabel object which acts as a mapping from symbolic names to actual registers, while the Constants object maps names to actual values. If the line contains a $GREG$ statement (standing for global register) a register label is set up mapping to the first available global register. Global registers are indexed starting from register $\$255$ (which is always global), and decrement each time a $GREG$ statement is encountered. This means the first $GREG$ statement will be mapped to register $\$254$, the second $\$253$ and so on. Normally there are a finite number of global registers, but the interpreter does not enforce this (partly because special registers are unimplemented, more on them in Section \ref{sec:unimp}). Next if a source line contains a label this Label is placed in the Label object, which contains a mapping of label names to indices into the Code array. When a label is referenced the interpreter checks the Label object and returns the correct index into the Code array. If the line has no label then it is simply passed into the code array.
+
+After all the code is read the interpreter finds the location of the $Main$ label and sets the special instruction pointer, called iptr, to the index for the $Main$ label in the Code array. The interpreter can now begin execution. It is worth mentioning here that memory is maintained separate from code in a separate Memory array. This has a few implications, one being no self modifying code can be written (there is no way to write to the Code array), and two; data entered as source code ends up in the Code array. The latter is somewhat problematic and will be discussed further in Section \ref{sec:unimp}.
+
+Execution starts at the $Main$ label and executes the opcode found in the Code array. If the opcode is not recognized by the interpreter it is replaced with a $nop$, which does nothing (well almost nothing, the interpreter prints a warning so its easier to see typographical errors). A side effect of this allows comments to be in the form of any line that does not contain a valid opcode or any other construct recognized by the interpreter! If the opcode is unimplemented (there are a few) then a warning will be printed saying so, but otherwise the line is treated like a $nop$. Execution continues until the $TRAP$ opcode is encountered with $0,Halt,0$ as arguments. The interpreter can also be run one operation at a time which allows code to be stepped through. With this mode of operation the contents of the registers and memory can be examined at each step which is extremely useful for debugging and visualizing how the code is moving values around.
+
+\begin{figure}
+\begin{lstlisting}
+a	IS	$0
+b	IS	$1	
+c	IS	$2
+d	IS	#0123456789abcdef
+f	IS 	-1
+
+zero	GREG	0
+x2	GREG	0
+	
+	ADD 	c,b,f
+	GO 	x2,zero,End
+Main	ADD	a,zero,d
+	SRU	b,a,63
+	BZ	zero,-4
+End	TRAP 	0,Halt,0
+\end{lstlisting}
+\caption{Sample MMIXAL Source that runs in the interpreter.}
+\label{fig:mmixal}
+\end{figure}
+
+
+\vspace{0.5cm}
+\section{Unimplemented Parts}
+\label{sec:unimp}
+
+Due to the scope of the interpreter some features (not just opcodes) remain unimplemented some of which we encountered before in Section \ref{sec:impl}.
+
+One large unimplemented feature is all text in a source file is placed into the interpreters Code array, which unfortunately means there is no current way of putting values into memory other than through the store ($ST*$) operations. In fact the interpreter does not recognize $BYTE$, $WIDE$, $TETRA$, or $OCTA$, which means constants can only be defined using the $IS$ construct, and data can not be loaded into memory using $BYTE$, $WIDE$, $TETRA$, or $OCTA$. Being able to load data into memory is one of the major missing features of the interpreter and is definitely a feature I would have liked to include, unfortunately the way I designed the Code and Memory arrays makes this non trivial for the time being. Future versions of the interpreter will definitely support this feature!
+
+A slightly related issue involves strings. Currently the only way to get a string to display is to have the entire string in the Code array, then call the $TRAP$ opcode with the $0,Fputs,StdOut$ arguments and have the index of the string (in the Code array) in register $\$255$. This is in fact the only way to print anything, as strings and characters do not exist in the interpreter, and the Fputs trap code expects a JavaScript string as an argument. An implementation side effect of this is that the $LDA$ opcode is explicitly used to load an address from the Code array, any other address loading or computation should be done with the $ADDU$ opcode ($LDA$ actually does not exist in MMIX, it is a MMIXAL construct that gets translated to $ADDU$). Strings are normally defined in MMIXAL using the $BYTE$ construct, with the string argument following, however the interpreter does not recognize $BYTE$ so the line is essentially treated as a comment, but still loaded into the Code array as mentained above.
+
+Special registers contain system specific information in MMIX such as if overflow occured, signals from $TRAP$ opcodes and other information not critical to normal program execution. For this reason the special registers remain largely unimplemented. The $SET$ and $GET$ family of opcodes are normally how the special registers are manipulated, but they too remain unimplemented. Unfortunately this means there is no way to tell if integer overflow occurred during execution other than examining the results of the computation or writing an explicit check in the MMIX code, as overflow is indicated by a special register. This also means that the modulus of a register can not be computed (well, through $DIV$). Normally the $DIV$ opcode places the remainder in the $rR$ special register, which is actually set in the interpreter, however there is no way of retrieving the register $rR$. Special registers are also used with the $PUSH$ and $POP$ family of opcodes, and so those too remain unimplemented, however other branching methods are available (Section \ref{sec:ops} has a brief overview of all the families of opcodes). 
+
+The $PUSH$ and $POP$ opcodes use two special registers $rG$ and $rL$, which tell MMIX how many global and local registers are present. $rG$ is not explicitly used in the operations, but $rL$ can never exceed or be equal to $rG$. Local registers are probably best explained if we imagine all the registers as a list with a pointer pointing to some element which we call register $\$0$. When one of the $PUSH$ opcodes is called this pointer is essentially moved forward by the amount specified in the operation (lets call it x). This results in register $\$x$ becoming the new register $\$0$, rendering the old registers $\$0$ to $\$x-1$ inaccessible. The $POP$ operation essentially reverses the process, moving the pointer backwards. In MMIX terms these operations are said to operate on the register stack, whose height can not exceed the number of local registers $rL$. These opcodes remain unimplemented as although they are very useful, the functionality they provide is not essential. Branching can be done with other opcodes, and subroutines can simply be coded to use a unique set of registers. The one case where this poses a problem is with recursive subroutine calls, where previous results in registers actually matter. In this case register contents are best placed in memory which on a normal system would be a significant performance hit, but is actually the same type of operation as a register lookup in the interpreter.
+
+Some quality of life features that are not a part of MMIX but are valid MMIXAL remain unimplemented in the interpreter, most notably mathematical expressions in the expression portion of an MMIXAL statement. A frequently encountered example is when an address is calculated in MMIXAL. Say for example we have a label $Loop$, and we have the statement $GO$ $\$0,\$0,Loop+4$, normally this would be fine, however the interpreter will look for the label $Loop+4$ as a string and not calculate the actual address desired. A related problem is branching with relative labels. In MMIXAL labels can be defined such as $2H, 3H \dots $ etc. and instructions that require relative addresses (such as branches and jumps) can address them as $2F$ or $2B$ meaning the closest $2H$ label with an address greater than (Forward) or less than (Backward) the current address. In the interpreter all relative addresses must be integers! These problems could easily be sorted out in the first pass when instructions are being read into the Code array, however the functionality is not essential and therefore remains unimplemented.
+
+\vspace{0.5cm}
+\section{Opcodes}
+\label{sec:ops}
+
+Now that we have talked about what does not work lets focus on the fun parts, the opcodes. Here we will take a look at the families of opcodes and explain a little about how they work, how to use them, and any considerations that may be important. See Table \ref{tab:opcodes} for a list of implemented and unimplemented opcodes and for a look at how opcodes are acutally implemented check the file mmix.js in the Github code repository at \url{https://github.com/stredger/mmixjs}.
+
+Loading and storing values to and from memory is done with the $LD*$ and $ST*$ opcodes. The load operations take a value from memory and place it in a register, while the store operations do the opposite. If a value is loaded from an unset location in Memory, a warning will be presented, but the load will succeed returning a value of zero. Attempting to store an unset register will result in an error. In fact attempting to use (not set) any register whose value has not been set previously results in an error!
+
+Arithmetic operations are pretty straightforward and all basic arithmetic (add, subtract, multiply, divide) functions normally. As mentioned before the interpreter has no way to indicate overflow. For unsigned multiplication ($MULU$) if overflow occurs the result will be the lowest 64 bits. The high bits are stored in a special register $rH$, but there is no way to access it as of yet (actually one could print the special registers from the JavaScript console but this is not useful in an MMIX program). The $MUL$ opcode is a little more complicated and actually may lose precision if the result is greater than $\pm 2^{52}$ as the multiplication is done as JavaScript numbers (a warning is presented in the interpreter). So when possible the $MULU$ opcode is recommended. Division also suffers the same precision problem in both the signed and unsigned cases when either the numerator or denominator is greater than $\pm 2^{52}$. Opcodes such as $2ADDU$, $4ADDU$, etc. remain unimplemented as their functionality can be replicated with either a shift or multiply, then an add. 
+
+Simple bitwise operations such as shifts and negations are implemented as well as ands, ors, and xors. The more complex bitwise operations namely $MUX$, $MOR$, $SADD$, and $MXOR$ as well as the bytewise operations ($*DIF$) are unimplemented at this point in time. Conditional instructions such as $CMP$, $CS*$ and $ZS*$ are all implemented. Floating point operations are implemented except for the ones that use the special register $rE$ as an epsilon value (they all end with $*E$, such as $FCMPE$), $FUN$, and $FINT$, as well as the operations that deal with short floats.
+
+Branching opcodes that use relative addresses are implemented ($JMP$, $B*$, $PB*$),  but as stated before a relative address must be an integer (recall that expressions are not allowed in the interpreter). For example Jumping two operations back looks like $JMP -2$. However the relative address can be a constant or a register. Normally MMIX does not allow registers to be used as relative addresses, but the interpreter does not distinguish between a constant, register, or immediate in this case. The $GO$ opcode is also implemented and allows branching to an absolute address including line number, or Label. Subroutine opcodes such as $PUSH*$ and $POP$ are unimplemented as discussed in Section \ref{sec:unimp}, as well as $SAVE$ and $UNSAVE$.
+
+
+\begin{table}
+\tiny
+\begin{tabular}{cc|c}
+\large{$Implemented$} & & \large{$Unimplemented$} \\
+\hline
+
+$LDA$ & $ADD$ & $2ADDU$ \\
+$ADDI$ & $ADDU$ & $2ADDUI$ \\
+$ADDUI$ & $AND$ & $4ADDU$ \\
+$ANDI$ & $ANDN$ & $4ADDUI$ \\
+$ANDNI$ & $BDIFI$ & $8ADDU$ \\
+$BEV$ & $BEVB$ & $8ADDUI$ \\
+$BN$ & $BNB$ & $16ADDU$ \\
+$BNN$ & $BNNB$ & $16ADDUI$ \\
+$BNP$ & $BNPB$ & $ANDNH$ \\
+$BNZ$ & $BNZB$ & $ANDNL$ \\
+$BOD$ & $BODB$ & $ANDNMH$ \\
+$BP$ & $BPB$ & $ANDNML$ \\
+$BZ$ & $BZB$ & $BDIF$ \\
+$CMP$ & $CMPI$ & $CSWAP$ \\
+$CMPU$ & $CMPUI$ & $FCMPE$ \\
+$CSEV$ & $CSEVI$ & $FEQLE$ \\
+$CSN$ & $CSNI$ & $FINT$ \\
+$CSNN$ & $CSNNI$ & $FLOTU$ \\
+$CSNP$ & $CSNPI$ & $FLOTUI$ \\
+$CSNZ$ & $CSNZI$ & $FREM$ \\
+$CSOD$ & $CSODI$ & $FUN$ \\
+$CSP$ & $CSPI$ & $FUNE$ \\
+$CSWAPI$ & $CSZ$ & $GET$ \\
+$CSZI$ & $DIV$ & $GETA$ \\
+$DIVI$ & $DIVU$ & $GETAB$ \\
+$DIVUI$ & $FADD$ & $INCH$ \\
+$FCMP$ & $FDIV$ & $INCL$ \\
+$FEQL$ & $FIX$ & $INCMH$ \\
+$FIXU$ & $FLOT$ & $INCML$ \\
+$FLOTI$ & $FMUL$ & $JMPB$ \\
+$FSQRT$ & $FSUB$ & $LDUNC$ \\
+$GO$ & $GOI$ & $LDSF$ \\
+$JMP$ & $LDB$ & $LDVTS$ \\
+$LDBI$ & $LDBU$ & $MOR$ \\
+$LDBUI$ & $LDHT$ & $MUX$ \\
+$LDHTI$ & $LDO$ & $MXOR$ \\
+$LDOI$ & $LDOU$ & $ODIF$ \\
+$LDUNCI$ & $LDOUI$ & $ORH$ \\
+$LDSFI$ & $LDT$ & $ORL$ \\
+$LDTI$ & $LDTU$ & $ORMH$ \\
+$LDTUI$ & $LDVTSI$ & $ORML$ \\
+$LDW$ & $LDWI$ & $POP$ \\
+$LDWU$ & $LDWUI$ & $PREGO$ \\
+$MORI$ & $MUL$ & $PRELD$ \\
+$MULI$ & $MULU$ & $PREST$ \\
+$MULUI$ & $MUXI$ & $PUSHGO$ \\
+$MXORI$ & $NAND$ & $PUSHJ$ \\
+$NANDI$ & $NEG$ & $PUSHJB$ \\
+$NEGI$ & $NEGU$ & $PUT$ \\
+$NEGUI$ & $NOR$ & $RESUME$ \\
+$NORI$ & $NXOR$ & $SADD$ \\
+$NXORI$ & $ODIFI$ & $SAVE$ \\
+$OR$ & $ORI$ & $SETH$ \\
+$ORN$ & $ORNI$ & $SETL$ \\
+$PBEV$ & $PBEVB$ & $SETMH$ \\
+$PBN$ & $PBNB$ & $SETML$ \\
+$PBNN$ & $PBNNB$ & $SFLOT$ \\
+$PBNP$ & $PBNPB$ & $SFLOTU$ \\
+$PBNZ$ & $PBNZB$ & $STUNC$ \\
+$PBOD$ & $PBODB$ & $STSF$ \\
+$PBP$ & $PBPB$ & $SWYM$ \\
+$PBZ$ & $PBZB$ & $SYNC$ \\
+$PREGOI$ & $PRELDI$ & $SYNCD$ \\
+$PRESTI$ & $PUSHGOI$ & $SYNCID$ \\
+$PUTI$ & $SADDI$ & $TDIF$ \\
+$SFLOTI$ & $SFLOTUI$ & $TRIP$ \\
+$SL$ & $SLI$ & $UNSAVE$ \\
+$SLU$ & $SLUI$ & $WDIF$ \\
+$SR$ & $SRI$ & \\
+$SRU$ & $SRUI$ & \\
+$STB$ & $STBI$ & \\
+$STBU$ & $STBUI$ & \\
+$STCO$ & $STCOI$ & \\
+$STHT$ & $STHTI$ & \\
+$STO$ & $STOI$ & \\
+$STOU$ & $STUNCI$ & \\
+$STOUI$ & $STSFI$ & \\
+$STT$ & $STTI$ & \\
+$STTU$ & $STTUI$ & \\
+$STW$ & $STWI$ & \\
+$STWU$ & $STWUI$ & \\
+$SUB$ & $SUBI$ & \\
+$SUBU$ & $SUBUI$ & \\
+$SYNCDI$ & $SYNCIDI$ & \\
+$TDIFI$ & $TRAP$ & \\
+$WDIFI$ & $XOR$ & \\
+$XORI$ & $ZSEV$ & \\
+$ZSEVI$ & $ZSN$ & \\
+$ZSNI$ & $ZSNN$ & \\
+$ZSNNI$ & $ZSNP$ & \\
+$ZSNPI$ & $ZSNZ$ & \\
+$ZSNZI$ & $ZSOD$ & \\
+$ZSODI$ & $ZSP$ & \\
+$ZSPI$ & $ZSZ$ & \\
+$ZSZI$ & & \\
+
+\end{tabular}
+\vspace{0.1cm}
+\caption{Opcode status in the MMIX interpreter.} 
+\label{tab:opcodes}
+\end{table}
+
+
+\vspace{0.5cm}
+\section{Usage}
+\label{sec:usage}
+
+A live version of the interpreter can be found at \url{http://web.uvic.ca/~stredger/mmix/web}/ which includes a web gui and some example MMIX programs. All the code (including examples) is also available from the Github repository \url{https://github.com/stredger/mmixjs}. The gui includes an area for editing code, a display of the current registers and memory, a way to upload MMIXAL source files, and two ways to run the interpreter. Normal execution can be started with the Run button which takes all the code in the editing area and runs the entire file, while the Step button will run one instruction starting from the highlighted line (a red line number). Code can be edited in the edit area and will be refreshed each time the Run button is pressed, but if edited and the interpreter is stepping through some previous code, the Reset button must be used to reload the code into the interpreter. Messages will be displayed reporting successful execution, any warnings such as nops and unimplemented opcodes, and any failures. The failure message will most likely be cryptic as they are just errors thrown by the JavaScript runtime, but they do come with a line number corresponding to the offending line in the editable code area. Debug output is printed to the JavaScript console, which also provides a more detailed description upon errors (such as a stack trace) so if any major problems are encountered the console is the best place to check. 
+
+The interpreter was developed using Node.js which uses Google’s V8 JavaScript engine. The interpreter has not been tested outside the V8 engine (so Google Chrome is the best bet for a compatible browser) and there may be (well, almost undoubtedly are) browser specific bugs.
+
+
+\vspace{0.5cm}
+\section{Conclusion}
+
+The MMIX JavaScript interpreter turned out much better than expected and is a much more complete project than initially envisioned. The most difficult part about implementing the interpreter is simulating 64 bit operations on two 32 bit values, but in most cases the operations are quite straightforward. The interpreter uses some JavaScript features that are relatively new to the specification so it is doubtful the interpreter will run in older JavaScript engines, and as stated before in Section \ref{sec:usage} has only been tested in Google’s V8. One major design choice I now have trouble justifying is separating Code and Memory into separate arrays and if given time I would definately either place them in a single array, or have some translation between addresses expressed in source code, and the actual locations in the interpreter. The main missing feature of the interpreter in my opinion is being able to get data into memory through code definitions. Currently the interpreter works great for segments of code, but it is a pain to load a bunch of values into memory to use in further computation.
+
+The gui is a simple design and definitely has room for improvement, but functionally serves its purpose allowing code to be edited, run, and stepped through. The views on registers and memory serve as the only ways to look inside the system, but for the interpreters purpose, which is to understand how MMIX operations work, I feel they provide an excellent mechanism  to fulfill that goal. Of course there is always room for improvement so I encourage the reader to test out the interpreter at \url{http://web.uvic.ca/~stredger/mmix/web} and be sure to report any bugs encountered in the repository \url{https://github.com/stredger/mmixjs}!
+
+
+\vspace{0.5cm}
+\bibliographystyle{IEEEtran}
+\bibliography{IEEEabrv,ref}
+\end{document}

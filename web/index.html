@@ -4,10 +4,8 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="">
-    <meta name="author" content="">
 
-    <title>mmix.js the online web MMIX interpreter</title>
+    <title>The js MMIX interpreter!</title>
 
     <!-- Bootstrap -->
     <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
@@ -31,13 +29,13 @@
           <a class="navbar-brand" href="#">mmix.js</a>
         </div>
         <div class="navbar-collapse collapse navbar-right">
-          <a class="navbar-brand" href="#">About</a>
-          <a class="navbar-brand" href="#">Help</a>
+          <a class="navbar-brand" href="../tex/mmixjs.pdf">About</a>
+          <a class="navbar-brand" href="help.html">Help</a>
         </div><!--/.navbar-collapse -->
       </div>
     </div>
 
-    <!-- Actual body -->
+    <!-- mmix interpreter body -->
     <div class="container">
     	<div class="row">
     		<div class="col-md-6">
@@ -52,7 +50,17 @@
             <div class="row">
               <span class="btn btn-default btn-file">
                 Upload File <input type="file" id="fileinput"/>
-              </span>       
+              </span>
+              <div class="btn-group">
+                <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+                  Examples <span class="caret"></span>
+                </button>
+                <ul id="exampledd" class="dropdown-menu" role="menu">
+                  <li><a href="#">triarea.mms</a></li>
+                  <li><a href="#">leftmostbit.mms</a></li>
+                  <li><a href="#">ruler.mms</a></li>
+                </ul>
+              </div>
             </div>
             <div id="alertarea" class="row">      
             </div>
@@ -70,7 +78,6 @@
             </table>
             <button type="button" id="regbtn" class="btn btn-primary">Refresh</button>
           </div>
-          <hr>
           <div class="tablecontainer">
             <h2>Memory</h2>
             <table id="memtable" class="table table-condensed table-striped table-responsive tableview">
@@ -84,8 +91,6 @@
           </div>
         </div>
     	</div>
-       
-      </div>
     </div>
 
     <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>

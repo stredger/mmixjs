@@ -14,31 +14,29 @@ m5	GREG	#00000000ffffffff
 
 zero	GREG	0
 
-Main	ADD	x,zero,#8080
+%
+% Given a value in register x will 
+% calculate the ruler function rho
+%
 
+Main	ADD	x,zero,#8080	%get a value into x
 	NEGU	y,x
 	AND	y,x,y
 	AND	q,y,m5
 	ZSZ	rho,q,32
-
 	AND	q,y,m4
 	ADD	t,rho,16
 	CSZ	rho,q,t
-
 	AND	q,y,m3
 	ADD	t,rho,8
 	CSZ	rho,q,t
-
 	AND	q,y,m2
 	ADD	t,rho,4
 	CSZ	rho,q,t
-
 	AND	q,y,m1
 	ADD	t,rho,2
 	CSZ	rho,q,t
-
 	AND	q,y,m0
 	ADD	t,rho,1
 	CSZ	rho,q,t
-
 	TRAP	0,Halt,0
